@@ -53,17 +53,17 @@ const sections = [
 ];
 
 const commandCatalog = [
-  { command: 'auth [subcommand] [provider]', description: 'Configure API keys for AI providers', category: 'Setup & Config' },
+  { command: 'auth [subcommand] [provider]', description: 'Configure API keys for AI providers', alias: 'login', category: 'Setup & Config' },
   { command: 'config', description: 'Manage Sentinel configuration', category: 'Setup & Config' },
   { command: 'setup', description: 'Setup configuration wizard', category: 'Setup & Config' },
   { command: 'install-hooks', description: 'Install pre-commit hooks', category: 'Setup & Config' },
   { command: 'validate', description: 'Validate Sentinel configuration file', category: 'Setup & Config' },
   { command: 'status', description: 'Show Sentinel system status and statistics', category: 'Setup & Config' },
+  { command: 'context', description: 'Analyze and display deep project context (framework, arch, risks)', category: 'Setup & Config' },
 
-  { command: 'analyze [files...]', description: 'Analyze code for issues', category: 'Analysis Core' },
+  { command: 'analyze [files...]', description: 'Analyze code for issues', alias: 'review', category: 'Analysis Core' },
   { command: 'security-audit', description: 'Run comprehensive security scan (security + api + secrets + dependency)', category: 'Analysis Core' },
-  { command: 'full-scan', description: 'Run all available analyzers', category: 'Analysis Core' },
-  { command: 'full', description: 'Run all analyzers across the project', category: 'Analysis Core' },
+  { command: 'full-scan', description: 'Run all available analyzers', alias: 'full', category: 'Analysis Core' },
   { command: 'pre-commit', description: 'Quick pre-commit check on staged files', category: 'Analysis Core' },
   { command: 'frontend', description: 'Frontend-focused analysis (React + TypeScript + Accessibility)', category: 'Analysis Core' },
   { command: 'backend', description: 'Backend-focused analysis (Security + API + Performance)', category: 'Analysis Core' },
@@ -74,12 +74,17 @@ const commandCatalog = [
   { command: 'analyze-workspace', description: 'Analyze all packages in a monorepo workspace', category: 'Analysis Core' },
   { command: 'parallel [target]', description: 'Run parallel analysis with worker threads', category: 'Analysis Core' },
   { command: 'parallel-status', description: 'Show parallel processing status and metrics', category: 'Analysis Core' },
-  { command: 'benchmark', description: 'Run performance benchmarks', category: 'Analysis Core' },
+  { command: 'benchmark', description: 'Run performance benchmarks', alias: 'bench', category: 'Analysis Core' },
+  { command: 'trace <identifier>', description: 'Trace function/class usage through the codebase', category: 'Analysis Core' },
+  { command: 'impact <file>', description: 'Analyze impact of changing a specific file', category: 'Analysis Core' },
 
   { command: 'agents [input]', description: 'Run multi-agent analysis (Scanner → Fixer → Validator)', category: 'AI & Agents' },
   { command: 'agents ci [input]', description: 'Run multi-agent analysis with CI defaults (SARIF/JUnit, gating)', category: 'AI & Agents' },
   { command: 'agents pr <pr-url> [input]', description: 'Run multi-agent analysis and post markdown summary to a GitHub PR', category: 'AI & Agents' },
+  { command: 'interactive', description: 'Start interactive conversational AI mode', alias: 'i', category: 'AI & Agents' },
   { command: 'chat [prompt...]', description: 'Launch a Sentinel interactive assistant console', category: 'AI & Agents' },
+  { command: 'search <query>', description: 'Semantic code search using natural language', alias: 'find', category: 'AI & Agents' },
+  { command: 'ask <question>', description: 'Ask questions about your codebase using AI', category: 'AI & Agents' },
   { command: 'models', description: 'List and configure Sentinel AI providers', category: 'AI & Agents' },
   { command: 'fix [files...]', description: 'Automatically fix common issues in code', category: 'AI & Agents' },
   { command: 'fix [target]', description: 'Automatically fix detected issues', category: 'AI & Agents' },
@@ -106,14 +111,19 @@ const commandCatalog = [
   { command: 'dashboard', description: 'Launch the Sentinel web dashboard', category: 'Reporting & Ops' },
   { command: 'server', description: 'Start the Sentinel API server', category: 'Reporting & Ops' },
   { command: 'cache', description: 'Manage analysis cache for improved performance', category: 'Reporting & Ops' },
+  { command: 'history', description: 'Show command history and recent findings', category: 'Reporting & Ops' },
+  { command: 'learning', description: 'Show learning statistics from feedback', category: 'Reporting & Ops' },
 
   { command: 'rules', description: 'Manage custom linting rules', category: 'Governance & Security' },
   { command: 'team', description: 'Manage team workspace', category: 'Governance & Security' },
   { command: 'features', description: 'Manage feature flags', category: 'Governance & Security' },
   { command: 'policy', description: 'Manage security policies', category: 'Governance & Security' },
-  { command: 'scan-secrets [target]', description: 'Scan for secrets and sensitive data', category: 'Governance & Security' },
+  { command: 'scan-secrets [target]', description: 'Scan for secrets and sensitive data', alias: 'secrets', category: 'Governance & Security' },
   { command: 'secret-patterns', description: 'List all secret detection patterns', category: 'Governance & Security' },
-  { command: 'stats', description: 'Show repository statistics', category: 'Governance & Security' }
+  { command: 'stats', description: 'Show repository statistics', category: 'Governance & Security' },
+  { command: 'attack-surface', description: 'Map attack surface and entry points', category: 'Governance & Security' },
+  { command: 'threats', description: 'Generate STRIDE-based threat model', category: 'Governance & Security' },
+  { command: 'compliance <standard>', description: 'Check compliance with standards (OWASP, HIPAA, etc.)', category: 'Governance & Security' }
 ];
 
 export function Docs() {
@@ -317,7 +327,7 @@ export function Docs() {
                       <div>
                         <p className="font-display font-bold text-sm text-[var(--color-text-tertiary)] uppercase tracking-wider mb-2">Global NPM Install</p>
                         <CodeBlock
-                          code="npm install -g @sentinel/cli"
+                          code="npm install -g sentinel-cli"
                           id="install-npm"
                         />
                       </div>

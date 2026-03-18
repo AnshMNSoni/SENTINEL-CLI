@@ -115,18 +115,21 @@ sentinel analyze --no-snippets
 ### Pre-configured Analysis Sets
 
 ```bash
-# Comprehensive security audit (security, secrets, dependency)
-sentinel security-audit
-
-# Full analysis with all 11 analyzers
+# Full analysis with all analyzers
 sentinel full-scan
 sentinel full                     # Alias for full-scan
+
+# Comprehensive security audit (security, secrets, dependency, api)
+sentinel security-audit
 
 # Frontend-focused analysis
 sentinel frontend                 # React + TypeScript + Accessibility
 
 # Backend-focused analysis
 sentinel backend                  # Security + API + Performance
+
+# Deep Project Context
+sentinel context                  # Analyze framework, architecture, and structural risks
 
 # Pre-commit workflow
 sentinel pre-commit               # Staged files only
@@ -142,6 +145,7 @@ sentinel ci --fail-on critical    # Exit only on critical issues
 
 # Save analysis to history
 sentinel full-scan --save-history
+sentinel history                  # Alias for audit-log (see Reporting)
 ```
 
 ---
@@ -253,12 +257,24 @@ sentinel analyze  # Uses only Groq
 ### AI Assistant
 
 ```bash
-# Launch interactive assistant
+# Start interactive conversational AI mode
+sentinel interactive
+sentinel i                        # Shortcut
+
+# Launch interactive assistant console
 sentinel chat
 
 # Ask specific question about current code
 sentinel chat "What are the security issues in this code?"
 sentinel chat "How can I improve the TypeScript types here?"
+
+# Ask questions with deep codebase indexing
+sentinel ask "How does the authentication flow work in this project?"
+sentinel ask "Where is the main entry point for the API?"
+
+# Semantic code search
+sentinel search "JWT validation logic"
+sentinel find "database middleware" # Alias for search
 
 # Set custom persona for AI
 sentinel chat --persona "You are a senior security engineer"
@@ -283,6 +299,16 @@ sentinel stats --detailed
 
 # Output as JSON
 sentinel stats --format json
+
+# Map entry points and data flows
+sentinel attack-surface
+
+# Generate STRIDE-based threat model
+sentinel threats
+
+# Check compliance with standards
+sentinel compliance owasp
+sentinel compliance hipaa
 ```
 
 ---
@@ -524,6 +550,13 @@ sentinel analyze --analyzers security,secrets --format json | sentinel report --
 
 # Performance impact report
 sentinel analyze --analyzers performance,quality --format json | sentinel report --performance
+
+# View historical analysis trends
+sentinel trends
+
+# Show command history and recent findings
+sentinel audit-log
+sentinel history                  # Alias
 ```
 
 ---

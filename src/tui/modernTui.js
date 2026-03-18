@@ -375,6 +375,7 @@ if (allowedOrigins.includes(req.headers.origin)) {
 
     this.handlers = {
       'analyze': this.handleAnalyze.bind(this),
+      'mcp': this.handleMcp.bind(this),
       'audit': this.handleSecurityAudit.bind(this),
       'fix': this.handleFix.bind(this),
       'scan': this.handleScan.bind(this),
@@ -392,6 +393,13 @@ if (allowedOrigins.includes(req.headers.origin)) {
       'demo': this.handleDemo.bind(this),
       'chat': this.handleChat.bind(this),
       'ask': this.handleAsk.bind(this),
+      'explain': this.handleExplain.bind(this),
+      'fast': this.handleFastScan.bind(this),
+      'ci-annotate': this.handleCIAnnotate.bind(this),
+      'metrics': this.handleMetricsExport.bind(this),
+      'digest': this.handleDigest.bind(this),
+      'issue': this.handleIssueTracker.bind(this),
+      'pre-push': this.handlePrePush.bind(this),
       'exec': this.handleExec.bind(this),
       'run': this.handleExec.bind(this),
       'shell': this.handleExec.bind(this),
@@ -713,6 +721,7 @@ ${chalk.yellow('Utility:')}
   clear                - Clear screen
   exit                 - Exit sentinel
   help                 - Show this help
+  mcp                  - Start Sentinel MCP server
 `;
     this.addMessage('system', helpText);
   }
@@ -731,6 +740,21 @@ ${chalk.yellow('Utility:')}
     } catch (e) {
       spinner.fail('Analysis failed');
       if (e.stdout) this.addMessage('system', e.stdout);
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleMcp(_args, _fullCommand) {
+    const spinner = ora('Starting Sentinel MCP server...').start();
+    try {
+      spinner.succeed('MCP Server running on stdio');
+      this.addMessage('system', 'Sentinel MCP Server is now active. AI assistants can use Sentinel as a tool.');
+      this.addMessage('system', 'Note: This command will run until you exit.');
+      
+      const { runMCPServer } = await import('../commands/mcpCommand.js');
+      await runMCPServer();
+    } catch (e) {
+      spinner.fail('MCP Server failed to start');
       this.addMessage('error', e.message);
     }
   }
@@ -916,6 +940,104 @@ ${chalk.yellow('Utility:')}
       this.addMessage('system', stdout);
     } catch (e) {
       this.addMessage('error', `Demo failed: ${e.message}`);
+    }
+  }
+
+  async handleExplain(args, _fullCommand) {
+    const target = args[0];
+    if (!target) {
+      this.addMessage('system', 'Usage: explain <file:line>');
+      this.addMessage('system', 'Example: explain src/auth.js:47');
+      return;
+    }
+
+    const spinner = ora('Analyzing code...').start();
+    
+    try {
+      const { runExplainCommand } = await import('../commands/explainCommand.js');
+      await runExplainCommand([target], { projectPath: this.projectPath });
+      spinner.succeed('Analysis complete');
+    } catch (e) {
+      spinner.fail('Explain failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleFastScan(args, _fullCommand) {
+    const spinner = ora('Running fast scan...').start();
+    
+    try {
+      const { runFastScanCommand } = await import('../commands/fastScanCommand.js');
+      await runFastScanCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Scan complete');
+    } catch (e) {
+      spinner.fail('Fast scan failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleCIAnnotate(args, _fullCommand) {
+    const spinner = ora('Posting annotations...').start();
+    
+    try {
+      const { runCIAnnotateCommand } = await import('../commands/ciAnnotateCommand.js');
+      await runCIAnnotateCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Annotations posted');
+    } catch (e) {
+      spinner.fail('Annotation failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleMetricsExport(args, _fullCommand) {
+    const spinner = ora('Exporting metrics...').start();
+    
+    try {
+      const { runMetricsCommand } = await import('../commands/metricsCommand.js');
+      await runMetricsCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Metrics exported');
+    } catch (e) {
+      spinner.fail('Export failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleDigest(args, _fullCommand) {
+    const spinner = ora('Sending digest...').start();
+    
+    try {
+      const { runDigestCommand } = await import('../commands/digestCommand.js');
+      await runDigestCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Digest sent');
+    } catch (e) {
+      spinner.fail('Digest failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handleIssueTracker(args, _fullCommand) {
+    const spinner = ora('Managing issues...').start();
+    
+    try {
+      const { runIssueTrackerCommand } = await import('../commands/issueTrackerCommand.js');
+      await runIssueTrackerCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Issue operation complete');
+    } catch (e) {
+      spinner.fail('Issue operation failed');
+      this.addMessage('error', e.message);
+    }
+  }
+
+  async handlePrePush(args, _fullCommand) {
+    const spinner = ora('Setting up pre-push hook...').start();
+    
+    try {
+      const { runPrePushCommand } = await import('../commands/prePushCommand.js');
+      await runPrePushCommand(args, { projectPath: this.projectPath });
+      spinner.succeed('Pre-push hook configured');
+    } catch (e) {
+      spinner.fail('Setup failed');
+      this.addMessage('error', e.message);
     }
   }
 

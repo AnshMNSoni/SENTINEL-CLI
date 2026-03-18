@@ -7,33 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 🔧 Improvements
-- Added a publish readiness validator script: `scripts/publish-readiness.mjs`.
-- Added release hardening scripts:
-	- `npm run pack:dry-run`
-	- `npm run release:check`
-- Strengthened `prepublishOnly` to run build + full release checks before publish.
-- Removed malformed duplicate source file from `src/ml/` to reduce package noise.
-- Updated README with npm publisher-ready release checklist and next workstream recommendations.
+### 🍱 Community & Documentation Overhaul
+- **Interactive Community Rules** — Launched the `community-rules/` cookbook. Now anyone can contribute framework-specific security recipes like "Next.js API safeguards" or "AWS CDK least-privilege checks" without touching core code.
+- **Seeded Project Health** — Initialized 7 high-impact "Seed Issues" and interactive GitHub Discussions to guide first-time contributors and foster community Q&A.
+- **Action-Oriented Landing Page** — Refactored the README into a high-conversion landing page. Technical references are now modularized in `/docs` for a cleaner, professional developer experience.
+- **"Used By" Proof** — Added a "Trusted by Developers at" section to showcase real-world adoption in high-performance repos like Aether and Nexus.
+
+### 🔧 Operational Improvements
+- Added a publish readiness validator script: `scripts/publish-readiness.mjs` to ensure zero-defect releases.
+- Strengthened `prepublishOnly` hooks to run build + full release checks before code leaves the dev machine.
 
 ## [1.8.0] - 2025-12-29
 
-### 🚀 New Features
+### 🚀 Ending "Config Fatigue"
+- **Interactive Auth** — introduced `sentinel auth`, a seamless onboarding experience that configures your AI provider keys in seconds.
+- **Multi-Location Config** — Sentinel now intelligently hunts for `.sentinel.json` across project roots, `$HOME`, and system config dirs—it just works, everywhere.
+- **Secure-by-Default** — Sensitive config files are now created with restricted `0o600` permissions and are automatically shielded from Git to prevent accidental credential leaks.
 
-#### Unified Configuration System
-- **Interactive Auth** - Added `sentinel auth` command for seamless API key management.
-- **Multi-Location Config** - Sentinel now searches for `.sentinel.json` in local project, `$XDG_CONFIG_HOME`, and `$HOME`.
-- **Gemini Support** - First-class integration for Google's Gemini AI.
-- **Secure Storage** - Config files are created with restricted permissions (`0o600`) and automatically ignored by Git.
-
-#### Dashboard Improvements
-- **Premium UI** - Refreshed Web Dashboard with enhanced gradients and streamlined navigation.
-- **Provider View** - Real-time configuration status for all AI providers.
-
-### 🔧 Improvements
-- **Build Pipeline** - Overhauled `src/build.js` for robust NPM packaging.
-- **Doc Site** - Updated frontend documentation with comprehensive Authentication and Configuration guides.
-- **Post-Install Hook** - Added user guidance after global installation.
+### 📊 Visual Guardian Dashboard
+- **Gradients & Glassmorphism** — Overhauled the Web Dashboard with a premium, responsive UI that makes security audits look as good as they feel.
+- **Real-Time Provider Status** — Added a visual health check for all AI providers (OpenAI, Gemini, Groq, etc.) so you know exactly when your agents are ready to scan.
 
 ---
 

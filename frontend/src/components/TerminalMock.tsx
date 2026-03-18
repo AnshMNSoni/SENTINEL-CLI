@@ -6,14 +6,13 @@ interface TerminalLine {
 }
 
 const sampleOutput: TerminalLine[] = [
-  { type: 'command', content: 'sentinel review-pr https://github.com/org/repo/pull/123' },
-  { type: 'output', content: '🔍 Fetching PR #123 context...' },
-  { type: 'success', content: '✓ Analyzed 12 changed files' },
-  { type: 'output', content: '🤖 Thinking...' },
-  { type: 'warning', content: '⚠ Found IDOR vulnerability in users.ts' },
-  { type: 'warning', content: '⚠ Exposed API key in config.env' },
-  { type: 'success', content: '✓ Generated 3 automated fixes' },
-  { type: 'success', content: '🚀 Commented on PR #123' },
+  { type: 'command', content: 'sentinel agents pr https://github.com/org/repo/pull/123' },
+  { type: 'output', content: '🔍 Analyzing PR #123 with multi-agent pipeline...' },
+  { type: 'success', content: '✓ Scanner found 3 potential vulnerabilities' },
+  { type: 'output', content: '🤖 Fixer generating remediation patches...' },
+  { type: 'success', content: '✓ Validator verified 2 security patches' },
+  { type: 'warning', content: '⚠ Manual review required for 1 finding' },
+  { type: 'success', content: '🚀 Posted review summary to PR #123' },
   { type: 'output', content: '   View Report: https://sentinel.ai/report/xyz' },
 ];
 

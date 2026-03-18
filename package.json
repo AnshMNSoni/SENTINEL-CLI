@@ -52,6 +52,8 @@
     "bench": "node src/core/cli.js benchmark --quick",
     "deploy": "npm run build:frontend && npx vercel --prod",
     "demo": "node src/core/demo.js",
+    "mcp:start": "node mcp/sentinel-mcp-server.js",
+    "mcp:dev": "node --watch mcp/sentinel-mcp-server.js",
     "prepublishOnly": "npm run build:frontend && npm run release:check",
     "postversion": "git push && git push --tags",
     "postinstall": "echo \"\n✨ Sentinel CLI installed! Run 'sentinel auth' to configure your API keys or 'sentinel dashboard' to see the UI.\n\""
@@ -137,11 +139,13 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/node": "^20.19.33",
     "eslint-config-prettier": "^9.1.0",
     "jest": "^29.7.0",
     "playwright": "^1.58.1",
-    "prettier": "^3.1.0"
+    "prettier": "^3.1.0",
+    "zod": "^4.3.6"
   },
   "engines": {
     "node": ">=18.0.0"

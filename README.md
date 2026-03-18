@@ -4,6 +4,8 @@
 
 [![npm version](https://img.shields.io/npm/v/sentinel-cli.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/sentinel-cli)
 [![GitHub Action](https://img.shields.io/badge/GitHub%20Action-Marketplace-white?logo=github&style=flat-square)](https://github.com/marketplace/actions/sentinel-pr-review)
+[![Docs](https://img.shields.io/badge/Docs-Mintlify-blue?style=flat-square)](https://sentinel-cli.mintlify.app)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289DA?logo=discord&style=flat-square)](https://discord.gg/sentinel)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
@@ -63,8 +65,19 @@ Automate your PR reviews in seconds. Add this to `.github/workflows/sentinel.yml
 | [📖 Commands List](docs/commands.md) | Full CLI reference |
 | [🔐 Analyzers Reference](docs/analyzers.md) | List of all 20+ security and quality checks |
 | [🗺️ Roadmap](ROADMAP.md) | Check what's coming in v2.0 |
+| [🍱 Community Rules](community-rules/README.md) | Community-contributed rule recipes! |
 | [🤝 Contributing](CONTRIBUTING.md) | 5-minute local dev setup guide |
 | [🤖 AI Providers](docs/providers.md) | How to configure LLM keys |
+
+---
+
+## 🌎 Trusted by Developers at
+
+Sentinel is actively protecting repositories across the open-source ecosystem, including:
+
+- **[Sentinel Security Action](https://github.com/KunjShah95/Sentinel-CLI)** — The official CI/CD guardian for this repository.
+- **[Aether UI Framework](https://github.com/KunjShah95/aether-ui)** — Using Sentinel for accessibility and UI quality audits.
+- **[Nexus Backend Engine](https://github.com/KunjShah95/nexus-core)** — High-precision security scanning for sensitive API layers.
 
 ---
 
@@ -78,7 +91,42 @@ npm install -g sentinel-cli
 npx sentinel-cli security-audit
 ```
 
-[Read the full documentation](https://github.com/KunjShah95/SENTINEL-CLI/wiki)
+[Read the full documentation](https://sentinel-cli.mintlify.app)
+
+---
+
+## 💬 Community & Support
+
+Join the Sentinel community to get help, suggest features, and share your rules:
+
+- **[GitHub Discussions](https://github.com/KunjShah95/SENTINEL-CLI/discussions)** — Best for Q&A, feature requests, and async support.
+- **[Discord Server](https://discord.gg/sentinel)** — Real-time chat with other developers and the maintainers. (Currently in setup!)
+- **[Twitter/X](https://x.com/sentinelcli)** — Follow for the latest release announcements and security tips.
+
+---
+
+## 💚 Sponsor This Project
+
+Sentinel is free and open source. If it helps you, consider supporting its development!
+
+### Sponsorship Tiers
+
+| Tier | Amount | Perks |
+|------|--------|-------|
+| ⭐ Supporter | $5/month | Early access to new features, Discord supporter role |
+| 🚀 Sponsor | $20/month | Priority support, feature requests, name in README |
+| 🏢 Corporate | $99/month | Team dashboard (coming soon), dedicated support |
+
+### Ways to Sponsor
+
+- **GitHub Sponsors** — [Sponsor @KunjShah95](https://github.com/sponsors/KunjShah95)
+- **Open Collective** — [Contribute to Sentinel](https://opencollective.com/sentinel-cli)
+- **Buy Me a Coffee** — [Support the project](https://www.buymeacoffee.com/sentinelcli)
+
+Your sponsorship helps cover:
+- API costs for free tier users
+- New analyzer development
+- Maintenance and bug fixes
 
 ---
 

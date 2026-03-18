@@ -1,73 +1,68 @@
-# Sentinel CLI Command Reference
+# 📖 Sentinel CLI Command Reference
 
-Sentinel CLI provides a comprehensive set of 30+ commands for code analysis, AI interaction, and CI/CD integration.
+Sentinel provides a powerful set of commands for security auditing, AI-powered code reviews, and project management.
 
-## Core Analysis
+## 🛠️ Setup & Config
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `sentinel auth` | `login` | Configure API keys for AI providers (OpenAI, Gemini, Groq) |
+| `sentinel setup` | - | Interactive configuration wizard |
+| `sentinel config` | - | Manage Sentinel configuration manually |
+| `sentinel status` | - | Show Sentinel system status and statistics |
+| `sentinel context` | - | Analyze and display deep project context (framework, arch, risks) |
+| `sentinel install-hooks`| - | Install pre-commit hooks |
+| `sentinel validate` | - | Validate `.sentinel.json` configuration |
 
-| Command | Description |
-|---------|-------------|
-| `sentinel analyze [files...]` | Analyze files or directory |
-| `sentinel analyze --staged` | Analyze git staged changes |
-| `sentinel analyze --branch <name>` | Analyze branch diff |
-| `sentinel analyze --analyzers security,quality,bugs` | Specific analyzers |
-| `sentinel analyze --format json` | JSON output |
-| `sentinel analyze --fail-on high` | Exit code on severity |
+## 🔍 Analysis Core
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `sentinel analyze` | `review` | Analyze specific files or directories |
+| `sentinel security-audit`| - | Comprehensive security scan (Security + API + Secrets + Deps) |
+| `sentinel full-scan` | `full` | Run all available analyzers across the project |
+| `sentinel pre-commit` | - | Scan staged files (called by git hooks) |
+| `sentinel frontend` | - | Frontend-specific analysis (React, TSX, A11y) |
+| `sentinel backend` | - | Backend-specific analysis (Security, Performance) |
+| `sentinel container` | - | Docker and Kubernetes security checks |
+| `sentinel trace <id>` | - | Trace usage of a function or class across the codebase |
+| `sentinel impact <f>` | - | Analyze architectural impact of changing a specific file |
+| `sentinel list-analyzers`| `analyzers`| List all 20+ built-in security and quality analyzers |
 
-## Preset Scans
+## 🤖 AI & Agents
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `sentinel interactive` | `i` | Start interactive conversational AI mode |
+| `sentinel search <q>` | `find` | Semantic code search using natural language queries |
+| `sentinel ask <q>` | - | Ask questions about your codebase (requires indexing) |
+| `sentinel chat` | - | Launch the Sentinel interactive assistant console |
+| `sentinel fix` | - | Automatically fix detected security and quality issues |
+| `sentinel pr-description`| - | Generate AI-powered PR descriptions |
+| `sentinel agents pr` | - | Run multi-agent review and post results to a GitHub PR |
+| `sentinel test-suggestions`| - | Generate unit test suggestions for specific files |
 
-| Command | Description |
-|---------|-------------|
-| `sentinel security-audit` | Security + API + Secrets + Dependency |
-| `sentinel full-scan` | All 20+ analyzers |
-| `sentinel frontend` | React + TypeScript + Accessibility |
-| `sentinel backend` | Security + API + Performance + Secrets |
-| `sentinel container` | Docker + Kubernetes + Security |
-| `sentinel pre-commit` | Fast pre-commit check |
-| `sentinel ci` | CI-friendly with fail-on threshold |
+## 📊 Reporting & Governance
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `sentinel dashboard` | - | Launch the local web dashboard (UI) |
+| `sentinel badge` | - | Generate dynamic security score badges for README |
+| `sentinel sarif` | - | Export results in SARIF format for GitHub Security |
+| `sentinel audit-log` | `history` | View history of commands and findings |
+| `sentinel compliance` | - | Check compliance with standards (OWASP, HIPAA, etc.) |
+| `sentinel threats` | - | Generate STRIDE-based threat models |
+| `sentinel attack-surface`| - | Map entry points and data flows |
 
-## AI & Agents
+## ⚡ Shortcuts & Aliases
+You can use these shorter versions for frequently used commands:
 
-| Command | Description |
-|---------|-------------|
-| `sentinel chat [prompt]` | Interactive AI assistant |
-| `sentinel agents [input]` | Multi-agent analysis pipeline |
-| `sentinel agents-pr <pr-url>` | Run agents and post to PR |
+- `s i` → `sentinel interactive`
+- `s review` → `sentinel analyze`
+- `s login` → `sentinel auth`
+- `s full` → `sentinel full-scan`
+- `s find` → `sentinel search`
+- `s bench` → `sentinel benchmark`
+- `s analyzers` → `sentinel list-analyzers`
+- `s secrets` → `sentinel scan-secrets`
 
-## Configuration
+---
 
-| Command | Description |
-|---------|-------------|
-| `sentinel auth` | Configure API keys |
-| `sentinel config --list` | Show configuration |
-| `sentinel config --set key=value` | Set config value |
-| `sentinel models` | Manage AI providers |
-| `sentinel list-analyzers` | Show available analyzers |
-
-## Output & Reporting
-
-| Command | Description |
-|---------|-------------|
-| `sentinel fix [files...]` | Auto-fix common issues |
-| `sentinel fix --dry-run` | Preview fixes |
-| `sentinel sarif` | Generate SARIF report |
-| `sentinel notify --slack` | Send to Slack |
-| `sentinel trends` | Historical trend analysis |
-| `sentinel blame` | Git blame attribution |
-
-## Integration
-
-| Command | Description |
-|---------|-------------|
-| `sentinel review-pr <url>` | Post review to GitHub PR |
-| `sentinel webhook` | Start webhook server |
-| `sentinel install-hooks` | Install git pre-commit hooks |
-| `sentinel badge` | Generate security badges |
-
-## Utilities
-
-| Command | Description |
-|---------|-------------|
-| `sentinel stats` | Repository statistics |
-| `sentinel dashboard` | Web UI dashboard |
-| `sentinel cache --stats` | Cache statistics |
-| `sentinel cache --clear` | Clear cache |
+> [!TIP]
+> For more detailed options for each command, run `sentinel [command] --help`.

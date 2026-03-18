@@ -99,10 +99,10 @@ export function Features() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <div className="flex items-center bg-[var(--color-obsidian)] border border-[var(--color-sentinel)]/30 rounded-lg px-4 py-3 font-mono text-sm text-[var(--color-sentinel)] w-full sm:w-auto min-w-[300px]">
               <span className="mr-2 text-[var(--color-text-tertiary)]">$</span>
-              <span>npm install -g @sentinel/cli</span>
+              <span>npm install -g sentinel-cli</span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText('npm install -g @sentinel/cli');
+                  navigator.clipboard.writeText('npm install -g sentinel-cli');
                   alert('Copied to clipboard!');
                 }}
                 className="ml-auto hover:text-[var(--color-text-primary)] transition-colors cursor-pointer"
