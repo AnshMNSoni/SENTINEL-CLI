@@ -260,7 +260,9 @@ export class Config {
       );
       this.config.ai.providers = providers;
       // Persist the sanitized config to avoid reintroducing secrets later.
-      this.save().catch(err => console.warn(`Config: failed to save sanitized config: ${err.message}`));
+      this.save().catch(err =>
+        console.warn(`Config: failed to save sanitized config: ${err.message}`)
+      );
     }
   }
 
@@ -280,10 +282,19 @@ export class Config {
     return true;
   }
 
+  getAll() {
+    if (!this.config) {
+      throw new Error('Config not loaded. Call load() first.');
+    }
+    return this.config;
+  }
+
   getAnalyzers() {
     // Check environment variable first (set by CLI --analyzers flag)
     if (process.env.SENTINEL_ANALYZERS) {
-      return process.env.SENTINEL_ANALYZERS.split(',').map(a => a.trim()).filter(Boolean);
+      return process.env.SENTINEL_ANALYZERS.split(',')
+        .map(a => a.trim())
+        .filter(Boolean);
     }
     return this.get('analysis.enabledAnalyzers', []);
   }

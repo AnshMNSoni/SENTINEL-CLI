@@ -1,10 +1,12 @@
-import { useCallback, useRef, useState } from "react";
-import { TextAttributes } from "@opentui/core";
-import type { InputRenderable } from "@opentui/core";
-import { useKeyboardLayer } from "../../providers/keyboard-layer";
-import { useTheme } from "../../providers/theme";
-import { getFilteredCommands } from "./commands";
-import type { CommandContext } from "./types";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { TextAttributes } from '@opentui/core';
+import type { InputRenderable } from '@opentui/core';
+import { useKeyboardLayer } from '../../providers/keyboard-layer';
+import { useTheme } from '../../providers/theme';
+import { getFilteredCommands } from './commands';
+import { recordCommand } from '../../lib/command-mru';
+import type { CommandContext } from './types';
 
 const MAX_VISIBLE = 8;
 
@@ -14,11 +16,16 @@ type Props = {
 };
 
 export function CommandMenu({ onClose, ctx }: Props) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<InputRenderable>(null);
-  const { isTopLayer } = useKeyboardLayer();
+  const { isTopLayer, push, pop } = useKeyboardLayer();
   const { colors } = useTheme();
+
+  useEffect(() => {
+    push('command-menu');
+    return () => pop('command-menu');
+  }, [push, pop]);
 
   const filtered = getFilteredCommands(query);
 
@@ -31,10 +38,11 @@ export function CommandMenu({ onClose, ctx }: Props) {
     (_value: unknown) => {
       if (filtered[selectedIndex]) {
         const cmd = filtered[selectedIndex];
+        recordCommand(cmd.name);
         if (cmd.action) {
           cmd.action(ctx);
         } else {
-          ctx.execute(cmd.value.replace(/^\//, ""));
+          ctx.execute(cmd.value.replace(/^\//, ''));
         }
         onClose();
       }
@@ -42,36 +50,43 @@ export function CommandMenu({ onClose, ctx }: Props) {
     [filtered, selectedIndex, ctx, onClose]
   );
 
-  const handleKeyDown = useCallback(
-    (key: { name: string }) => {
-      if (!isTopLayer("command-menu")) return;
-      if (key.name === "up") {
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
-      }
-      if (key.name === "down") {
-        setSelectedIndex((prev) => Math.min(filtered.length - 1, prev + 1));
-      }
-      if (key.name === "escape") {
-        onClose();
-      }
-    },
-    [filtered.length, selectedIndex, onClose, isTopLayer]
-  );
+  useKeyboard(key => {
+    if (!isTopLayer('command-menu')) return;
+    if (key.name === 'up') {
+      setSelectedIndex(prev => Math.max(0, prev - 1));
+    }
+    if (key.name === 'down') {
+      setSelectedIndex(prev => Math.min(filtered.length - 1, prev + 1));
+    }
+    if (key.name === 'escape') {
+      onClose();
+    }
+  });
 
   const visibleHeight = Math.min(filtered.length, MAX_VISIBLE);
 
   const getCategoryColor = (category?: string) => {
     switch (category) {
-      case "general": return colors.info;
-      case "scan": return colors.warning;
-      case "git": return colors.primary;
-      case "actions": return colors.success;
-      case "settings": return colors.planMode;
-      case "output": return colors.info;
-      case "views": return colors.primary;
-      case "ci": return colors.warning;
-      case "server": return colors.info;
-      default: return colors.dimSeparator;
+      case 'general':
+        return colors.info;
+      case 'scan':
+        return colors.warning;
+      case 'git':
+        return colors.primary;
+      case 'actions':
+        return colors.success;
+      case 'settings':
+        return colors.planMode;
+      case 'output':
+        return colors.info;
+      case 'views':
+        return colors.primary;
+      case 'ci':
+        return colors.warning;
+      case 'server':
+        return colors.info;
+      default:
+        return colors.dimSeparator;
     }
   };
 
@@ -79,8 +94,10 @@ export function CommandMenu({ onClose, ctx }: Props) {
     <box position="absolute" top={0} left={0} width="100%" height="100%">
       <box
         backgroundColor="rgba(0,0,0,150)"
-        width="100%" height="100%"
-        alignItems="center" justifyContent="center"
+        width="100%"
+        height="100%"
+        alignItems="center"
+        justifyContent="center"
       >
         <box
           flexDirection="column"
@@ -93,7 +110,7 @@ export function CommandMenu({ onClose, ctx }: Props) {
             ref={inputRef}
             placeholder="Type a command..."
             focused
-            onChange={handleChange}
+            onInput={handleChange}
             onSubmit={handleSubmit}
           />
           <scrollbox height={visibleHeight}>
@@ -104,7 +121,7 @@ export function CommandMenu({ onClose, ctx }: Props) {
                   key={cmd.value}
                   flexDirection="row"
                   gap={1}
-                  backgroundColor={isSelected ? colors.selection + "40" : undefined}
+                  backgroundColor={isSelected ? colors.selection + '40' : undefined}
                   paddingX={1}
                   paddingY={0.5}
                 >

@@ -24,7 +24,8 @@ export const DO_NOT_SUPPRESS_TAGS = [
 class FalsePositiveReducer {
   constructor(options = {}) {
     this.eventBus = options.eventBus || new EventBus();
-    this.metrics = options.metrics || new MetricsCollector({ serviceName: 'false-positive-reducer' });
+    this.metrics =
+      options.metrics || new MetricsCollector({ serviceName: 'false-positive-reducer' });
     this.learningData = new Map();
     this.confidenceThreshold = options.confidenceThreshold || 0.7;
     this.autoLearn = options.autoLearn !== false;
@@ -45,7 +46,7 @@ class FalsePositiveReducer {
   setTenantContext(tenantId, teamId = null) {
     this.currentTenantId = tenantId;
     this.currentTeamId = teamId;
-    
+
     const tenantKey = this.getTenantKey(tenantId, teamId);
     if (!this.learningData.has(tenantKey)) {
       this.learningData.set(tenantKey, {
@@ -75,14 +76,14 @@ class FalsePositiveReducer {
 
   requiresApproval(issue) {
     if (!this.currentTeamId) return false;
-    
+
     const teamConfig = this.teamApprovalRequired.get(this.currentTeamId);
     if (!teamConfig?.enabled) return false;
-    
+
     if (teamConfig.requireApprovalForCritical && issue.severity === 'critical') {
       return true;
     }
-    
+
     return false;
   }
 
@@ -118,9 +119,9 @@ class FalsePositiveReducer {
         request.status = approvedBy ? 'approved' : 'rejected';
         request.approvedAt = new Date().toISOString();
         request.approvedBy = approvedBy;
-        
+
         this.eventBus.emit('suppression:approval_updated', request);
-        
+
         return { success: true, request };
       }
     }
@@ -222,7 +223,7 @@ class FalsePositiveReducer {
   trackSuppressionAnalytics(issue, category, suppressed) {
     const key = `${issue.analyzer}:${issue.type}`;
     const stats = this.suppressionAnalytics.get(key);
-    
+
     if (stats) {
       if (suppressed) {
         stats.suppressed++;
@@ -238,9 +239,7 @@ class FalsePositiveReducer {
     for (const [, stats] of this.suppressionAnalytics) {
       analytics.push({
         ...stats,
-        suppressionRate: stats.total > 0 
-          ? ((stats.suppressed / stats.total) * 100).toFixed(2) 
-          : 0,
+        suppressionRate: stats.total > 0 ? ((stats.suppressed / stats.total) * 100).toFixed(2) : 0,
       });
     }
     return analytics;
@@ -271,15 +270,13 @@ class FalsePositiveReducer {
     const codePatternResult = await this.codePatternSignal(issue);
     if (codePatternResult.isFalsePositive) {
       codePatternResult.category = SUPPRESSION_TAXONOMY.CODE_PATTERN;
-    signals.push(codePatternResult);
     }
+    signals.push(codePatternResult);
 
     const isFalsePositive = signals.some(s => s.isFalsePositive);
     const confidence = this.calculateConfidence(signals);
-    const reason = isFalsePositive
-      ? signals.find(s => s.isFalsePositive)?.reason
-      : null;
-    
+    const reason = isFalsePositive ? signals.find(s => s.isFalsePositive)?.reason : null;
+
     if (isFalsePositive) {
       const positiveSignal = signals.find(s => s.isFalsePositive);
       suppressionCategory = positiveSignal?.category || SUPPRESSION_TAXONOMY.PATTERN_MATCH;
@@ -413,7 +410,7 @@ class FalsePositiveReducer {
       totalWeight += weight;
     }
 
-    return 1 - (weightedSum / totalWeight);
+    return 1 - weightedSum / totalWeight;
   }
 
   async suggestFix(issue) {
@@ -421,7 +418,7 @@ class FalsePositiveReducer {
       security: {
         'hardcoded-password': 'Use environment variables or a secrets manager',
         'sql-injection': 'Use parameterized queries or an ORM',
-        'xss': 'Use proper output encoding or CSP headers',
+        xss: 'Use proper output encoding or CSP headers',
       },
       quality: {
         'complex-function': 'Consider breaking this function into smaller functions',
@@ -495,9 +492,8 @@ class FalsePositiveReducer {
 
     return {
       trackedIssueTypes: totalIssuesCount,
-      falsePositiveRate: totalIssuesCount > 0
-        ? (totalFalsePositives / totalIssuesCount * 100).toFixed(2)
-        : 0,
+      falsePositiveRate:
+        totalIssuesCount > 0 ? ((totalFalsePositives / totalIssuesCount) * 100).toFixed(2) : 0,
       feedbackCount: this.feedbackHistory.length,
       avgConfidence: this.calculateAverageConfidence(),
       suppressionAnalytics: this.getSuppressionAnalytics(),
@@ -523,9 +519,9 @@ class FalsePositiveReducer {
 
   exportLearningData(options = {}) {
     const { tenantId, teamId, includeAllTenants = false, sign = false, secretKey = null } = options;
-    
+
     let dataToExport;
-    
+
     if (includeAllTenants) {
       dataToExport = {};
       for (const [key, tenantData] of this.learningData) {
@@ -537,11 +533,11 @@ class FalsePositiveReducer {
     } else {
       const key = this.getTenantKey(tenantId || this.currentTenantId, teamId || this.currentTeamId);
       const tenantData = this.learningData.get(key);
-      
+
       if (!tenantData) {
         return null;
       }
-      
+
       dataToExport = {
         [key]: {
           ...tenantData,
@@ -578,19 +574,24 @@ class FalsePositiveReducer {
   }
 
   async importLearningData(data, options = {}) {
-    const { verifySignature: verify = false, secretKey = null, tenantId = null, teamId = null } = options;
-    
+    const {
+      verifySignature: verify = false,
+      secretKey = null,
+      tenantId = null,
+      teamId = null,
+    } = options;
+
     if (verify && secretKey && data.signature) {
       const dataString = JSON.stringify(data.data);
       const isValid = this.verifySignature(dataString, data.signature, secretKey);
-      
+
       if (!isValid) {
         throw new Error('Signature verification failed - data may have been tampered with');
       }
     }
 
     const targetKey = this.getTenantKey(tenantId || data.tenantId, teamId || data.teamId);
-    
+
     if (!this.learningData.has(targetKey)) {
       this.learningData.set(targetKey, {
         tenantId: tenantId || data.tenantId,
@@ -601,7 +602,7 @@ class FalsePositiveReducer {
     }
 
     const tenantData = this.learningData.get(targetKey);
-    
+
     for (const [key, history] of Object.entries(data.data || data)) {
       if (key !== 'version' && key !== 'exportedAt' && key !== 'tenantId' && key !== 'teamId') {
         tenantData.data.set(key, {
@@ -617,7 +618,7 @@ class FalsePositiveReducer {
 
   recordRemediationOutcome(issue, outcome) {
     const key = `${issue.analyzer}:${issue.type}:${issue.file}`;
-    
+
     if (!this.learningData.has(key)) {
       this.learningData.set(key, {
         total: 0,
@@ -630,14 +631,14 @@ class FalsePositiveReducer {
 
     const history = this.learningData.get(key);
     history.remediationOutcomes = history.remediationOutcomes || [];
-    
+
     const outcomeRecord = {
       timestamp: Date.now(),
       outcome,
       fixId: issue.fixId,
       issueId: issue.id,
     };
-    
+
     history.remediationOutcomes.push(outcomeRecord);
 
     if (outcome === 'accepted' || outcome === 'validated') {
@@ -667,7 +668,10 @@ class FalsePositiveReducer {
     history.confidenceAdjustment += adjustment;
 
     if (Math.abs(history.confidenceAdjustment) > 0.3) {
-      const penalty = history.remediationOutcomes?.filter(o => o.outcome === 'rollback' || o.outcome === 'rejected').length || 0;
+      const penalty =
+        history.remediationOutcomes?.filter(
+          o => o.outcome === 'rollback' || o.outcome === 'rejected'
+        ).length || 0;
       if (penalty > 3) {
         history.confidenceAdjustment = -0.2;
       }
@@ -676,22 +680,26 @@ class FalsePositiveReducer {
 
   async recalibrateConfidence(issues) {
     const recalibrationResults = [];
-    
+
     for (const issue of issues) {
       const key = `${issue.analyzer}:${issue.type}:${issue.file}`;
       const history = this.learningData.get(key);
-      
+
       if (!history) continue;
 
       const recentOutcomes = (history.remediationOutcomes || []).slice(-20);
-      const acceptedCount = recentOutcomes.filter(o => o.outcome === 'accepted' || o.outcome === 'validated').length;
-      const rejectedCount = recentOutcomes.filter(o => o.outcome === 'rejected' || o.outcome === 'rollback').length;
+      const acceptedCount = recentOutcomes.filter(
+        o => o.outcome === 'accepted' || o.outcome === 'validated'
+      ).length;
+      const rejectedCount = recentOutcomes.filter(
+        o => o.outcome === 'rejected' || o.outcome === 'rollback'
+      ).length;
       const total = acceptedCount + rejectedCount;
-      
+
       if (total >= 5) {
         const newConfidence = acceptedCount / total;
         const oldConfidence = issue.confidence || 0.5;
-        
+
         recalibrationResults.push({
           key,
           oldConfidence,
@@ -727,8 +735,10 @@ class FalsePositiveReducer {
       if (outcomes.length > 0) {
         stats.patternsWithOutcomes++;
         stats.totalOutcomes += outcomes.length;
-        
-        stats.accepted += outcomes.filter(o => o.outcome === 'accepted' || o.outcome === 'validated').length;
+
+        stats.accepted += outcomes.filter(
+          o => o.outcome === 'accepted' || o.outcome === 'validated'
+        ).length;
         stats.rejected += outcomes.filter(o => o.outcome === 'rejected').length;
         stats.rolledBack += outcomes.filter(o => o.outcome === 'rollback').length;
       }
@@ -804,7 +814,7 @@ class FalsePositiveReducer {
       if (rule && histRule !== rule) continue;
 
       const recentSnapshots = history.filter(s => s.timestamp > cutoffTime);
-      
+
       if (recentSnapshots.length < minSnapshots) continue;
 
       report.summary.totalRulesTracked++;
@@ -812,8 +822,11 @@ class FalsePositiveReducer {
       const firstConfidence = recentSnapshots[0].confidence;
       const lastConfidence = recentSnapshots[recentSnapshots.length - 1].confidence;
       const drift = lastConfidence - firstConfidence;
-      const avgConfidence = recentSnapshots.reduce((sum, s) => sum + s.confidence, 0) / recentSnapshots.length;
-      const variance = recentSnapshots.reduce((sum, s) => sum + Math.pow(s.confidence - avgConfidence, 2), 0) / recentSnapshots.length;
+      const avgConfidence =
+        recentSnapshots.reduce((sum, s) => sum + s.confidence, 0) / recentSnapshots.length;
+      const variance =
+        recentSnapshots.reduce((sum, s) => sum + Math.pow(s.confidence - avgConfidence, 2), 0) /
+        recentSnapshots.length;
       const stdDev = Math.sqrt(variance);
 
       drifts.push({
@@ -848,15 +861,16 @@ class FalsePositiveReducer {
 
   detectAnomalousDrift(threshold = 0.2) {
     const anomalies = [];
-    const recentTime = Date.now() - (24 * 60 * 60 * 1000);
+    const recentTime = Date.now() - 24 * 60 * 60 * 1000;
 
     for (const [key, history] of this.confidenceHistory || []) {
       const recentSnapshots = history.filter(s => s.timestamp > recentTime);
-      
+
       if (recentSnapshots.length < 3) continue;
 
       const [analyzer, rule] = key.split(':');
-      const recentDrift = recentSnapshots[recentSnapshots.length - 1].confidence - recentSnapshots[0].confidence;
+      const recentDrift =
+        recentSnapshots[recentSnapshots.length - 1].confidence - recentSnapshots[0].confidence;
 
       if (Math.abs(recentDrift) > threshold) {
         anomalies.push({

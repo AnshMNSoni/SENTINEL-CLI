@@ -5,8 +5,9 @@ import { StatusBar } from '../components/status-bar';
 import { SentinelBorderChars } from '../components/border';
 import { TOOLS } from '../lib/tools';
 import { getProviderInfo, getOllamaModels, type OllamaModel } from '../lib/chat';
+import { getVersion } from '../lib/version';
 import { useNavigate } from 'react-router';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 
 type DashboardData = {
   status: string;
@@ -29,6 +30,9 @@ export function Dashboard() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [sessionCount, setSessionCount] = useState(0);
+  const [cacheStats, setCacheStats] = useState<string>('...');
+  const [configStatus, setConfigStatus] = useState<string>('...');
+  const [gitInfo, setGitInfo] = useState<string>('...');
 
   useEffect(() => {
     async function load() {
@@ -36,11 +40,11 @@ export function Dashboard() {
         const result = await TOOLS.status.execute({});
         setData({
           status: result.success ? 'healthy' : 'error',
-          version: '2.0.0',
+          version: getVersion(),
           uptime: process.uptime(),
         });
       } catch {
-        setData({ status: 'error', version: '1.9.0' });
+        setData({ status: 'error', version: getVersion() });
       }
       try {
         const info = await getProviderInfo();
@@ -58,6 +62,34 @@ export function Dashboard() {
           setSessionCount(files.length);
         }
       } catch {}
+      try {
+        const { cache } = await import('../../utils/cache.js');
+        const s = cache.getStats();
+        setCacheStats(`${s.memorySize} entries, ${Math.round((s.hitRate || 0) * 100)}% hit rate`);
+      } catch {
+        setCacheStats('unavailable');
+      }
+      try {
+        if (existsSync('.codereviewrc.json')) {
+          const raw = readFileSync('.codereviewrc.json', 'utf-8');
+          const cfg = JSON.parse(raw);
+          const analyzerCount = cfg.analysis?.enabledAnalyzers?.length || 0;
+          const providerCount = cfg.ai?.providers?.length || 0;
+          setConfigStatus(`${analyzerCount} analyzers, ${providerCount} providers`);
+        } else {
+          setConfigStatus('not found');
+        }
+      } catch {
+        setConfigStatus('error reading');
+      }
+      try {
+        const { execSync } = await import('child_process');
+        const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+        const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+        setGitInfo(`${branch} @ ${commit}`);
+      } catch {
+        setGitInfo('not a git repo');
+      }
     }
     load();
   }, []);
@@ -219,6 +251,18 @@ export function Dashboard() {
             <box flexDirection="row" justifyContent="space-between">
               <text attributes={TextAttributes.DIM}>Ollama Models:</text>
               <text>{ollamaModels.length > 0 ? ollamaModels.length : '\u2014'}</text>
+            </box>
+            <box flexDirection="row" justifyContent="space-between">
+              <text attributes={TextAttributes.DIM}>Cache:</text>
+              <text fg={colors.info}>{cacheStats}</text>
+            </box>
+            <box flexDirection="row" justifyContent="space-between">
+              <text attributes={TextAttributes.DIM}>Config:</text>
+              <text fg={colors.info}>{configStatus}</text>
+            </box>
+            <box flexDirection="row" justifyContent="space-between">
+              <text attributes={TextAttributes.DIM}>Git:</text>
+              <text attributes={TextAttributes.DIM}>{gitInfo}</text>
             </box>
           </box>
         </box>

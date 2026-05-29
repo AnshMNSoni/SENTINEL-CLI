@@ -28,7 +28,7 @@ class SecretsScanner {
         vendor: 'AWS',
         remediation: 'Rotate immediately',
       },
-      
+
       // GitHub
       github_token: {
         pattern: /ghp_[A-Za-z0-9_]{36,}/,
@@ -54,7 +54,7 @@ class SecretsScanner {
         vendor: 'GitHub',
         remediation: 'Regenerate app credentials',
       },
-      
+
       // GitLab
       gitlab_token: {
         pattern: /glpat-[A-Za-z0-9\-_]{20,}/,
@@ -68,7 +68,7 @@ class SecretsScanner {
         vendor: 'GitLab',
         remediation: 'Revoke OAuth token',
       },
-      
+
       // Google
       google_api_key: {
         pattern: /AIza[0-9A-Za-z\-_]{35}/,
@@ -88,7 +88,7 @@ class SecretsScanner {
         vendor: 'Firebase',
         remediation: 'Regenerate Firebase API key',
       },
-      
+
       // Microsoft/Azure
       azure_client_secret: {
         pattern: /[a-zA-Z0-9+/]{86}==/,
@@ -108,7 +108,7 @@ class SecretsScanner {
         vendor: 'Microsoft',
         remediation: 'Regenerate API key',
       },
-      
+
       // Slack
       slack_token: {
         pattern: /xox[baprs]-([0-9a-zA-Z]{10,48})/,
@@ -117,12 +117,13 @@ class SecretsScanner {
         remediation: 'Revoke and create a new token',
       },
       slack_webhook: {
-        pattern: /https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9]+\/B[a-zA-Z0-9]+\/[a-zA-Z0-9]+/,
+        pattern:
+          /https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9]+\/B[a-zA-Z0-9]+\/[a-zA-Z0-9]+/,
         severity: 'high',
         vendor: 'Slack',
         remediation: 'Regenerate webhook URL',
       },
-      
+
       // Stripe
       stripe_key: {
         pattern: /(sk|pk)_(test|live)_[0-9a-zA-Z]{24,}/,
@@ -136,7 +137,7 @@ class SecretsScanner {
         vendor: 'Stripe',
         remediation: 'Regenerate webhook secret',
       },
-      
+
       // Twilio
       twilio_api_key: {
         pattern: /SK[a-f0-9]{32}/,
@@ -150,7 +151,7 @@ class SecretsScanner {
         vendor: 'Twilio',
         remediation: 'Regenerate auth token',
       },
-      
+
       // SendGrid
       sendgrid_api_key: {
         pattern: /SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}/,
@@ -158,7 +159,7 @@ class SecretsScanner {
         vendor: 'SendGrid',
         remediation: 'Regenerate API key',
       },
-      
+
       // Mailgun
       mailgun_api_key: {
         pattern: /key-[0-9a-zA-Z]{32}/,
@@ -166,7 +167,7 @@ class SecretsScanner {
         vendor: 'Mailgun',
         remediation: 'Regenerate API key',
       },
-      
+
       // SSH Keys
       private_key: {
         pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/,
@@ -180,7 +181,7 @@ class SecretsScanner {
         vendor: 'SSH',
         remediation: 'Ensure this is intentionally public',
       },
-      
+
       // JWT
       jwt_token: {
         pattern: /eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/,
@@ -188,7 +189,7 @@ class SecretsScanner {
         vendor: 'Generic',
         remediation: 'Invalidate the token and review access logs',
       },
-      
+
       // Database
       database_url: {
         pattern: /(mongodb(\+srv)?|postgres|postgresql|mysql|redis|mssql):\/\/[^\s"'<>]+/i,
@@ -202,7 +203,7 @@ class SecretsScanner {
         vendor: 'Generic',
         remediation: 'Use environment variables',
       },
-      
+
       // Generic API Keys
       api_key_generic: {
         pattern: /api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_]{20,}['"]/i,
@@ -222,7 +223,7 @@ class SecretsScanner {
         vendor: 'Generic',
         remediation: 'Use secrets management solution',
       },
-      
+
       // Passwords in code
       password_in_code: {
         pattern: /(?:password|passwd|pwd|pass)\s*[:=]\s*['"][^'"]{8,}['"]/i,
@@ -236,7 +237,7 @@ class SecretsScanner {
         vendor: 'Generic',
         remediation: 'Use environment variables',
       },
-      
+
       // Heroku
       heroku_api_key: {
         pattern: /[hH]eroku[aA][pP][iI][kK][eE][yY]\s*[:=]\s*['"][A-Za-z0-9-]{47}['"]/,
@@ -244,7 +245,7 @@ class SecretsScanner {
         vendor: 'Heroku',
         remediation: 'Regenerate API key',
       },
-      
+
       // NPM
       npm_token: {
         pattern: /npm_[A-Za-z0-9]{36}/,
@@ -252,7 +253,7 @@ class SecretsScanner {
         vendor: 'NPM',
         remediation: 'Regenerate NPM token',
       },
-      
+
       // PyPI
       pypi_token: {
         pattern: /pypi-AgEIcHlwaS5vcmc[A-Za-z0-9\-_]{50,}/,
@@ -260,7 +261,7 @@ class SecretsScanner {
         vendor: 'PyPI',
         remediation: 'Regenerate PyPI token',
       },
-      
+
       // Docker
       dockerhub_token: {
         pattern: /dockerhub_[A-Za-z0-9]{20}/,
@@ -268,7 +269,7 @@ class SecretsScanner {
         vendor: 'Docker',
         remediation: 'Regenerate Docker Hub token',
       },
-      
+
       // Cloudflare
       cloudflare_api_key: {
         pattern: /(?:cloudflare[_-]?)?api[_-]?key\s*[:=]\s*['"][a-zA-Z0-9]{37}['"]/i,
@@ -276,7 +277,7 @@ class SecretsScanner {
         vendor: 'Cloudflare',
         remediation: 'Regenerate API key',
       },
-      
+
       // Shopify
       shopify_api_key: {
         pattern: /shpat_[a-f0-9]{32}/,
@@ -284,7 +285,7 @@ class SecretsScanner {
         vendor: 'Shopify',
         remediation: 'Regenerate API key',
       },
-      
+
       // Square
       square_access_token: {
         pattern: /sq0atp-[0-9A-Za-z\-_]{22}/,
@@ -292,7 +293,7 @@ class SecretsScanner {
         vendor: 'Square',
         remediation: 'Regenerate access token',
       },
-      
+
       // PayPal
       paypal_client_id: {
         pattern: /[A-Za-z0-9]{20,}-[A-Za-z0-9]{20,}/,
@@ -300,10 +301,11 @@ class SecretsScanner {
         vendor: 'PayPal',
         remediation: 'Regenerate client credentials',
       },
-      
+
       // Environment files
       env_file_exposed: {
-        pattern: /^\s*(?:export\s+)?(?:AWS_|GOOGLE_|AZURE_|STRIPE_|GITHUB_|SENDGRID_|TWILIO_)[A-Z_]+\s*=/m,
+        pattern:
+          /^\s*(?:export\s+)?(?:AWS_|GOOGLE_|AZURE_|STRIPE_|GITHUB_|SENDGRID_|TWILIO_)[A-Z_]+\s*=/m,
         severity: 'high',
         vendor: 'Generic',
         remediation: 'Ensure .env is in .gitignore and use secrets manager',
@@ -332,9 +334,13 @@ class SecretsScanner {
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
       const line = lines[lineNum];
-      
+
       // Skip comments and known safe patterns
-      if (line.trim().startsWith('//') || line.trim().startsWith('#') || line.trim().startsWith('*')) {
+      if (
+        line.trim().startsWith('//') ||
+        line.trim().startsWith('#') ||
+        line.trim().startsWith('*')
+      ) {
         continue;
       }
 
@@ -342,7 +348,10 @@ class SecretsScanner {
         const matches = line.matchAll(pattern);
         for (const match of matches) {
           const potentialSecret = match[1] || match[0].replace(/['"]/g, '');
-          if (this.isHighEntropy(potentialSecret) && !this.isKnownFalsePositive(potentialSecret, line)) {
+          if (
+            this.isHighEntropy(potentialSecret) &&
+            !this.isKnownFalsePositive(potentialSecret, line)
+          ) {
             issues.push({
               type: 'high-entropy-string',
               severity: 'medium',
@@ -375,15 +384,43 @@ class SecretsScanner {
       /example|test|foo|bar|baz|placeholder/,
       /^[0-9a-f]{32,}$/i,
     ];
-    
+
     const lowerLine = line.toLowerCase();
     const falsePositiveValues = [
-      'changeme', 'password123', 'secret123', 'test123',
-      'aaaaaaa', 'bbbbbbb', 'cccccc',
+      'changeme',
+      'password123',
+      'secret123',
+      'test123',
+      'aaaaaaa',
+      'bbbbbbb',
+      'cccccc',
     ];
 
-    return falsePositivePatterns.some(p => p.test(lowerLine)) ||
-           falsePositiveValues.some(v => secret.toLowerCase().includes(v));
+    return (
+      falsePositivePatterns.some(p => p.test(lowerLine)) ||
+      falsePositiveValues.some(v => secret.toLowerCase().includes(v))
+    );
+  }
+
+  isHighEntropy(str) {
+    if (str.length < 10) return false;
+    const freq = {};
+    for (const ch of str) {
+      freq[ch] = (freq[ch] || 0) + 1;
+    }
+    let entropy = 0;
+    const len = str.length;
+    for (const count of Object.values(freq)) {
+      const p = count / len;
+      if (p > 0) entropy -= p * Math.log2(p);
+    }
+    return entropy >= this.entropyThreshold;
+  }
+
+  getSnippet(lines, lineNum) {
+    const start = Math.max(0, lineNum - 1);
+    const end = Math.min(lines.length, lineNum + 2);
+    return lines.slice(start, end).join('\n');
   }
 
   /**

@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "@opentui/react/jsx-runtime";
 import { useCallback, useRef, useState } from "react";
+import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useTheme } from "../providers/theme";
@@ -21,7 +22,7 @@ export function DialogSearchList({ items, onSelect, onHighlight, filterFn, rende
             onSelect(filtered[selectedIndex]);
         }
     }, [filtered, selectedIndex, onSelect]);
-    const handleKeyDown = useCallback((key) => {
+    useKeyboard((key) => {
         if (!isTopLayer("dialog"))
             return;
         if (key.name === "up" || key.name === "k") {
@@ -30,9 +31,12 @@ export function DialogSearchList({ items, onSelect, onHighlight, filterFn, rende
         if (key.name === "down" || key.name === "j") {
             setSelectedIndex((prev) => Math.min(filtered.length - 1, prev + 1));
         }
-    }, [filtered.length, isTopLayer]);
+        if (key.name === "escape") {
+            setSearchValue("");
+        }
+    });
     const visibleHeight = Math.min(filtered.length, MAX_VISIBLE_ITEMS);
-    return (_jsxs("box", { flexDirection: "column", gap: 1, children: [_jsx("input", { ref: inputRef, placeholder: placeholder, focused: true, onChange: handleChange, onSubmit: handleSubmit }), filtered.length === 0 ? (_jsx("text", { attributes: TextAttributes.DIM, children: emptyText })) : (_jsx("scrollbox", { ref: scrollRef, height: visibleHeight, children: filtered.map((item, i) => {
+    return (_jsxs("box", { flexDirection: "column", gap: 1, children: [_jsx("input", { ref: inputRef, placeholder: placeholder, focused: true, onInput: handleChange, onSubmit: handleSubmit }), filtered.length === 0 ? (_jsx("text", { attributes: TextAttributes.DIM, children: emptyText })) : (_jsx("scrollbox", { ref: scrollRef, height: visibleHeight, children: filtered.map((item, i) => {
                     const isSelected = i === selectedIndex;
                     return (_jsx("box", { flexDirection: "row", children: renderItem(item, isSelected) }, getKey(item)));
                 }) }))] }));

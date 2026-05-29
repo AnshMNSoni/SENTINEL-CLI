@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { type Theme } from "../../theme";
+export declare function applyTheme(name: string): void;
 type ThemeContextValue = {
     theme: Theme;
     setTheme: (name: string) => void;

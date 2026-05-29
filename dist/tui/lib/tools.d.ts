@@ -10,7 +10,7 @@ export type ToolDefinition = {
     readOnly: boolean;
 };
 export declare const TOOLS: Record<string, ToolDefinition>;
-export declare function getToolsForMode(mode: "BUILD" | "PLAN" | "SCAN" | "FIX"): Record<string, ToolDefinition>;
-export declare function getModeContext(mode: "BUILD" | "PLAN" | "SCAN" | "FIX"): string;
-export declare function executeTool(name: string, args: Record<string, unknown>, mode: "BUILD" | "PLAN" | "SCAN" | "FIX"): Promise<ToolResult>;
+export declare function getToolsForMode(mode: 'BUILD' | 'PLAN' | 'SCAN' | 'FIX'): Record<string, ToolDefinition>;
+export declare function getModeContext(mode: 'BUILD' | 'PLAN' | 'SCAN' | 'FIX'): string;
+export declare function executeTool(name: string, args: Record<string, unknown>, mode: 'BUILD' | 'PLAN' | 'SCAN' | 'FIX'): Promise<ToolResult>;
 //# sourceMappingURL=tools.d.ts.map

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import type { InputRenderable, ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
@@ -50,18 +51,18 @@ export function DialogSearchList<T>({
     [filtered, selectedIndex, onSelect]
   );
 
-  const handleKeyDown = useCallback(
-    (key: { name: string }) => {
-      if (!isTopLayer("dialog")) return;
-      if (key.name === "up" || key.name === "k") {
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
-      }
-      if (key.name === "down" || key.name === "j") {
-        setSelectedIndex((prev) => Math.min(filtered.length - 1, prev + 1));
-      }
-    },
-    [filtered.length, isTopLayer]
-  );
+  useKeyboard((key) => {
+    if (!isTopLayer("dialog")) return;
+    if (key.name === "up" || key.name === "k") {
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+    }
+    if (key.name === "down" || key.name === "j") {
+      setSelectedIndex((prev) => Math.min(filtered.length - 1, prev + 1));
+    }
+    if (key.name === "escape") {
+      setSearchValue("");
+    }
+  });
 
   const visibleHeight = Math.min(filtered.length, MAX_VISIBLE_ITEMS);
 
@@ -71,7 +72,7 @@ export function DialogSearchList<T>({
         ref={inputRef}
         placeholder={placeholder}
         focused
-        onChange={handleChange}
+        onInput={handleChange}
         onSubmit={handleSubmit}
       />
       {filtered.length === 0 ? (

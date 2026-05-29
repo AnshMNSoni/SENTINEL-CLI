@@ -4,8 +4,13 @@ export function Header() {
   const { colors } = useTheme();
   return (
     <box justifyContent="center" alignItems="center" paddingY={1}>
-      <box flexDirection="row" justifyContent="center" gap={0.5} alignItems="center">
-        <ascii-font font="tiny" text="Sentinel" color={colors.primary} />
+      <box flexDirection="column" justifyContent="center" alignItems="center">
+        <text fg={colors.primary}>
+          Sentinel
+        </text>
+        <text attributes={1} fg={colors.dimSeparator}>
+          AI-Powered Code Guardian
+        </text>
       </box>
     </box>
   );

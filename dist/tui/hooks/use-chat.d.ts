@@ -1,11 +1,11 @@
-export type Mode = "BUILD" | "PLAN" | "SCAN" | "FIX";
+export type Mode = 'BUILD' | 'PLAN' | 'SCAN' | 'FIX';
 export type MessagePart = {
-    type: "text" | "reasoning" | "tool-call" | "tool-result";
+    type: 'text' | 'reasoning' | 'tool-call' | 'tool-result';
     text?: string;
 };
 export type Message = {
     id: string;
-    role: "user" | "assistant" | "system" | "error";
+    role: 'user' | 'assistant' | 'system' | 'error';
     content: string;
     mode?: Mode;
     parts: MessagePart[];

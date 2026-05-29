@@ -1,4 +1,4 @@
-import type { CommandContext } from "./types";
+import type { CommandContext } from './types';
 type Props = {
     onClose: () => void;
     ctx: CommandContext;

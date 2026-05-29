@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { globSync } from 'glob';
+import { getDisplayVersion } from './version';
 
 export type ToolResult = {
   success: boolean;
@@ -218,7 +219,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
         return { success: true, output: `Project: ${pkg.name}\nVersion: ${pkg.version}\n` };
       } catch {
-        return { success: true, output: 'Sentinel v2.0.0' };
+        return { success: true, output: `Sentinel ${getDisplayVersion()}` };
       }
     },
   },
@@ -254,7 +255,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         const issues = await bot.analyzeFiles([target], { format: 'console' });
         if (issues && Array.isArray(issues) && issues.length > 0) {
           const fixer = new AutoFixGenerator();
-          const result = await fixer.generateFixes(issues);
+          const result = await fixer.generateFixesForIssues(issues);
           await bot.shutdown();
           return {
             success: true,

@@ -1,5 +1,5 @@
-import { type ReactNode } from "react";
-import type { DialogConfig } from "./types";
+import { type ReactNode } from 'react';
+import type { DialogConfig } from './types';
 type DialogContextValue = {
     open: (config: DialogConfig) => void;
     close: () => void;

@@ -1,4 +1,4 @@
-export type Mode = "BUILD" | "PLAN" | "SCAN" | "FIX";
+export type Mode = 'BUILD' | 'PLAN' | 'SCAN' | 'FIX';
 type Props = {
     mode?: Mode;
 };

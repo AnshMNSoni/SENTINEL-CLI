@@ -1,8 +1,12 @@
 import { jsx as _jsx } from "@opentui/react/jsx-runtime";
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { THEMES, DEFAULT_THEME } from "../../theme";
+let _externalSetTheme = null;
+export function applyTheme(name) {
+    _externalSetTheme?.(name);
+}
 const ThemeContext = createContext(null);
 function getPrefsPath() {
     const home = process.env.HOME || process.env.USERPROFILE || "~";
@@ -46,6 +50,10 @@ export function ThemeProvider({ children }) {
             saveTheme(name);
         }
     }, []);
+    useEffect(() => {
+        _externalSetTheme = setTheme;
+        return () => { _externalSetTheme = null; };
+    }, [setTheme]);
     return (_jsx(ThemeContext.Provider, { value: { theme, setTheme, themes: THEMES, colors: theme.colors }, children: children }));
 }
 export function useTheme() {

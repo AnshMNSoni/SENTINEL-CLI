@@ -3,6 +3,7 @@ import { chat } from '../lib/chat';
 import { getModeContext } from '../lib/tools';
 import { COMMAND_HANDLERS } from '../lib/commands';
 import { loadSession, saveSession, clearSession } from '../lib/session';
+import { isAuthPending, handleAuthInput } from '../lib/auth-flow';
 
 export type Mode = 'BUILD' | 'PLAN' | 'SCAN' | 'FIX';
 
@@ -147,11 +148,16 @@ export function useChat(options: UseChatOptions = {}) {
 
       setLoading(true);
       try {
-        const result = await handler.handler(cmdArgs);
-        if (result.startsWith('(') && result.endsWith(')')) {
-          removeLastMessage();
+        if (cmdName === 'new' || cmdName === 'clear') {
+          clear();
+          addMessage({
+            role: 'assistant',
+            content: `Session cleared. Start a new conversation.`,
+            parts: [{ type: 'text', text: `Session cleared. Start a new conversation.` }],
+          });
           return;
         }
+        const result = await handler.handler(cmdArgs);
         addMessage({ role: 'assistant', content: result, parts: [{ type: 'text', text: result }] });
       } catch (err: unknown) {
         addMessage({
@@ -162,18 +168,37 @@ export function useChat(options: UseChatOptions = {}) {
       }
       setLoading(false);
     },
-    [addMessage, removeLastMessage]
+    [addMessage, removeLastMessage, clear]
   );
 
   const sendInput = useCallback(
     (value: string) => {
       if (value.startsWith('/')) {
         sendCommand(value);
-      } else {
-        send(value);
+        return;
       }
+      if (isAuthPending()) {
+        const key = value;
+        addMessage({
+          role: 'user',
+          content: '(API key entered)',
+          mode: modeRef.current,
+          parts: [{ type: 'text', text: '(API key entered)' }],
+        });
+        setLoading(true);
+        handleAuthInput(key).then(result => {
+          addMessage({
+            role: 'assistant',
+            content: result,
+            parts: [{ type: 'text', text: result }],
+          });
+          setLoading(false);
+        });
+        return;
+      }
+      send(value);
     },
-    [send, sendCommand]
+    [send, sendCommand, addMessage]
   );
 
   const toggleMode = useCallback(() => {

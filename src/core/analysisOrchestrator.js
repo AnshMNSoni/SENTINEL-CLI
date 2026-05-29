@@ -6,9 +6,11 @@ import crypto from 'crypto';
 
 class AnalysisOrchestrator {
   constructor(options = {}) {
-    this.parallelProcessor = options.parallelProcessor || new ParallelProcessor({
-      maxWorkers: options.maxWorkers || 4,
-    });
+    this.parallelProcessor =
+      options.parallelProcessor ||
+      new ParallelProcessor({
+        maxWorkers: options.maxWorkers || 4,
+      });
     this.falsePositiveReducer = options.falsePositiveReducer || new FalsePositiveReducer();
     this.secretsScanner = options.secretsScanner || new SecretsScanner();
     this.autoFixGenerator = options.autoFixGenerator || new AutoFixGenerator();
@@ -31,7 +33,7 @@ class AnalysisOrchestrator {
       repoId,
       setAt: new Date().toISOString(),
     };
-    
+
     this.eventBus?.emit('tenant:context_set', this.tenantContext);
   }
 
@@ -120,11 +122,11 @@ class AnalysisOrchestrator {
     if (tenantId) {
       this.setTenantContext(tenantId, teamId, repoId);
     }
-    
+
     if (policyProfile) {
       this.setPolicyProfile(policyProfile);
     }
-    
+
     if (priority) {
       this.setQueuePriority(priority);
     }
@@ -133,9 +135,9 @@ class AnalysisOrchestrator {
     this.stageMetrics = {};
     this.fixTraceMap = new Map();
     this.dryRunMode = dryRun;
-    
+
     const executionMetadata = this.getExecutionMetadata();
-    
+
     this.eventBus?.emit('analysis:started', {
       runId: this.runId,
       fileCount: files.length,
@@ -172,28 +174,28 @@ class AnalysisOrchestrator {
 
   async runPipeline(files, analyzers, options) {
     let stageResult;
-    
+
     this.startStage('scan');
     stageResult = await this.stageScan(files, analyzers, options);
     this.completeStage('scan', { issueCount: stageResult.issues.length });
-    
+
     this.startStage('enrich');
     stageResult = await this.stageEnrich(stageResult.issues);
     this.completeStage('enrich', { issueCount: stageResult.issues.length });
-    
+
     this.startStage('dedupe');
     stageResult = await this.stageDedupe(stageResult.issues);
     this.completeStage('dedupe', { issueCount: stageResult.issues.length });
-    
+
     if (options.reduceFalsePositives) {
       this.startStage('reduceFalsePositives');
       stageResult = await this.stageReduceFalsePositives(stageResult.issues, files);
-      this.completeStage('reduceFalsePositives', { 
+      this.completeStage('reduceFalsePositives', {
         issueCount: stageResult.issues.length,
         suppressedCount: stageResult.suppressed?.length || 0,
       });
     }
-    
+
     this.startStage('prioritize');
     stageResult = await this.stagePrioritize(stageResult.issues);
     this.completeStage('prioritize', { issueCount: stageResult.issues.length });
@@ -201,21 +203,21 @@ class AnalysisOrchestrator {
     if (options.generateRemediation) {
       this.startStage('generateFix');
       stageResult = await this.stageGenerateFix(stageResult.issues);
-      this.completeStage('generateFix', { 
+      this.completeStage('generateFix', {
         fixCount: stageResult.fixes?.length || 0,
         issuesWithFixes: stageResult.issues.filter(i => i.fix).length,
       });
 
       this.startStage('validateFix');
       stageResult = await this.stageValidateFix(stageResult);
-      this.completeStage('validateFix', { 
+      this.completeStage('validateFix', {
         validFixCount: stageResult.fixes?.filter(f => f.isValid).length || 0,
         invalidFixCount: stageResult.fixes?.filter(f => !f.isValid).length || 0,
       });
 
       this.startStage('recommend');
       stageResult = await this.stageRecommend(stageResult);
-      this.completeStage('recommend', { 
+      this.completeStage('recommend', {
         recommendedCount: stageResult.issues.filter(i => i.recommendation).length,
       });
     }
@@ -226,18 +228,19 @@ class AnalysisOrchestrator {
   async stageGenerateFix(issues) {
     const fixes = [];
     const issuesWithFixes = [];
-    
+
     for (const issue of issues) {
-      const shouldGenerateFix = issue.severity === 'critical' || 
-                               issue.severity === 'high' || 
-                               this.autoFixGenerator.canAutoFix(issue);
+      const shouldGenerateFix =
+        issue.severity === 'critical' ||
+        issue.severity === 'high' ||
+        this.autoFixGenerator.canAutoFix(issue);
 
       if (shouldGenerateFix) {
         const fix = await this.autoFixGenerator.generateFix(issue);
-        
+
         if (fix) {
           const fixId = `fix_${this.runId}_${issue.id || Math.random().toString(36).substr(2, 9)}`;
-          
+
           this.fixTraceMap.set(fixId, {
             issueId: issue.id,
             issueType: issue.type,
@@ -260,7 +263,7 @@ class AnalysisOrchestrator {
             fix: fix,
             fixId,
           });
-          
+
           this.eventBus?.emit('fix:generated', {
             runId: this.runId,
             fixId,
@@ -275,7 +278,7 @@ class AnalysisOrchestrator {
       }
     }
 
-    return { 
+    return {
       issues: issuesWithFixes,
       fixes,
     };
@@ -283,10 +286,10 @@ class AnalysisOrchestrator {
 
   async stageValidateFix(stageResult) {
     const validatedFixes = [];
-    
+
     for (const fix of stageResult.fixes || []) {
       const validation = await this.validateFix(fix, stageResult.issues);
-      
+
       const traceEntry = this.fixTraceMap.get(fix.id);
       if (traceEntry) {
         traceEntry.validation = validation;
@@ -348,10 +351,10 @@ class AnalysisOrchestrator {
 
   async stageRecommend(stageResult) {
     const recommendedIssues = [];
-    
+
     for (const issue of stageResult.issues) {
       const recommendation = this.generateRecommendation(issue, stageResult.fixes);
-      
+
       if (recommendation) {
         recommendedIssues.push({
           ...issue,
@@ -370,7 +373,7 @@ class AnalysisOrchestrator {
 
   generateRecommendation(issue, fixes) {
     const issueFix = fixes?.find(f => f.issueId === issue.id || f.id === issue.fixId);
-    
+
     if (!issueFix) {
       return null;
     }
@@ -385,7 +388,7 @@ class AnalysisOrchestrator {
       recommendation.message = 'A validated fix is available for this issue';
       recommendation.fixId = issueFix.id;
       recommendation.confidence = issueFix.confidence;
-      
+
       if (this.dryRunMode) {
         recommendation.message += ' (dry-run mode - fix not applied)';
       }
@@ -404,14 +407,14 @@ class AnalysisOrchestrator {
 
   async stageScan(files, analyzers, options) {
     const tasks = this.createAnalysisTasks(files, analyzers);
-    
+
     let results;
     if (options.parallel) {
       results = await this.parallelProcessor.process(tasks, { timeout: options.timeout });
     } else {
       results = await this.processSequentially(tasks);
     }
-    
+
     let issues = this.aggregateResults(results);
 
     if (options.scanSecrets) {
@@ -424,7 +427,7 @@ class AnalysisOrchestrator {
 
   async stageEnrich(issues) {
     const enriched = [];
-    
+
     for (const issue of issues) {
       const enrichedIssue = {
         ...issue,
@@ -443,11 +446,11 @@ class AnalysisOrchestrator {
   inferCWE(issue) {
     const cweMap = {
       'sql-injection': 'CWE-89',
-      'xss': 'CWE-79',
+      xss: 'CWE-79',
       'command-injection': 'CWE-78',
       'path-traversal': 'CWE-22',
       'hardcoded-password': 'CWE-259',
-      'secret': 'CWE-798',
+      secret: 'CWE-798',
     };
     return cweMap[issue.type] || null;
   }
@@ -455,10 +458,10 @@ class AnalysisOrchestrator {
   inferOWASP(issue) {
     const owaspMap = {
       'sql-injection': 'A03:2021-Injection',
-      'xss': 'A03:2021-Injection',
+      xss: 'A03:2021-Injection',
       'command-injection': 'A03:2021-Injection',
       'hardcoded-password': 'A02:2021-Cryptographic Failures',
-      'secret': 'A02:2021-Cryptographic Failures',
+      secret: 'A02:2021-Cryptographic Failures',
     };
     return owaspMap[issue.type] || null;
   }
@@ -485,10 +488,10 @@ class AnalysisOrchestrator {
   async stageDedupe(issues) {
     const seen = new Map();
     const deduplicated = [];
-    
+
     for (const issue of issues) {
       const key = `${issue.analyzer}:${issue.type}:${issue.file}:${issue.line || 0}`;
-      
+
       if (!seen.has(key)) {
         seen.set(key, issue);
         deduplicated.push(issue);
@@ -509,8 +512,12 @@ class AnalysisOrchestrator {
 
   async stageReduceFalsePositives(issues, files) {
     const testFiles = files
-      .filter(f => f.path.includes('.test.') || f.path.includes('.spec.'))
-      .map(f => f.path);
+      .filter(
+        f =>
+          (typeof f === 'string' ? f : f.path || '').includes('.test.') ||
+          (typeof f === 'string' ? f : f.path || '').includes('.spec.')
+      )
+      .map(f => (typeof f === 'string' ? f : f.path));
 
     const reduced = await this.falsePositiveReducer.reduce(issues, {
       testFiles,
@@ -539,14 +546,56 @@ class AnalysisOrchestrator {
 
   createAnalysisTasks(files, analyzers) {
     const tasks = [];
+    const { readFileSync, existsSync, statSync } = require('fs');
+    const { join } = require('path');
+    const { globSync } = require('glob');
 
+    const EXCLUDE_DIRS = [
+      'node_modules',
+      '.git',
+      'dist',
+      'build',
+      '.next',
+      '.cache',
+      'coverage',
+      '.venv',
+      'venv',
+    ];
+
+    const expanded = [];
     for (const file of files) {
+      const filePath = typeof file === 'string' ? file : file.path;
+      if (existsSync(filePath) && statSync(filePath).isDirectory()) {
+        const matches = globSync(
+          '**/*.{js,ts,jsx,tsx,mjs,cjs,json,yaml,yml,py,rs,go,java,kt,cs,cpp,c,h,hpp}',
+          {
+            cwd: filePath,
+            nodir: true,
+            ignore: EXCLUDE_DIRS.map(d => `**/${d}/**`),
+          }
+        );
+      }
+    }
+
+    for (const entry of expanded) {
+      const filePath = entry.path;
+      let content = entry.content;
+      if (
+        content === undefined &&
+        filePath &&
+        existsSync(filePath) &&
+        statSync(filePath).isFile()
+      ) {
+        try {
+          content = readFileSync(filePath, 'utf-8');
+        } catch {}
+      }
       for (const analyzer of analyzers) {
         tasks.push({
           type: 'analyze',
           analyzer,
-          file: file.path,
-          content: file.content,
+          file: filePath,
+          content: content || '',
           options: {},
         });
       }
@@ -587,25 +636,80 @@ class AnalysisOrchestrator {
   async scanForSecrets(files, options = {}) {
     const { entropyAnalysis = true, customPatterns = [] } = options;
 
-    const tasks = [];
+    const allSecrets = [];
+    const { readFileSync, existsSync, statSync } = require('fs');
+    const { join } = require('path');
+    const { globSync } = require('glob');
 
+    const EXCLUDE_DIRS = [
+      'node_modules',
+      '.git',
+      'dist',
+      'build',
+      '.next',
+      '.cache',
+      'coverage',
+      '.venv',
+      'venv',
+    ];
+
+    const expanded = [];
     for (const file of files) {
-      tasks.push({
-        type: 'scan',
-        scanner: 'secrets',
-        file: file.path,
-        content: file.content,
-        options: { entropyAnalysis, customPatterns },
-      });
+      const filePath = typeof file === 'string' ? file : file.path;
+      if (existsSync(filePath) && statSync(filePath).isDirectory()) {
+        const matches = globSync(
+          '**/*.{js,ts,jsx,tsx,mjs,cjs,json,yaml,yml,py,rs,go,java,kt,cs,cpp,c,h,hpp,env,toml,cfg,ini,conf}',
+          {
+            cwd: filePath,
+            nodir: true,
+            ignore: EXCLUDE_DIRS.map(d => `**/${d}/**`),
+          }
+        );
+        for (const m of matches) {
+          expanded.push({ path: join(filePath, m), content: undefined });
+        }
+      } else {
+        expanded.push({
+          path: filePath,
+          content: typeof file === 'object' && file !== null ? file.content : undefined,
+        });
+      }
     }
 
-    const results = await this.parallelProcessor.process(tasks);
-    const allSecrets = [];
-
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value?.result) {
-        allSecrets.push(...result.value.result.issues);
+    for (const entry of expanded) {
+      const filePath = entry.path;
+      let content = entry.content;
+      if (
+        content === undefined &&
+        filePath &&
+        existsSync(filePath) &&
+        statSync(filePath).isFile()
+      ) {
+        try {
+          content = readFileSync(filePath, 'utf-8');
+        } catch {
+          content = '';
+        }
       }
+      if (!this.secretsScanner.shouldScanFile(filePath)) continue;
+      const secrets = this.secretsScanner.scanHighEntropy(content || '', filePath);
+      for (const [, rule] of Object.entries(this.secretsScanner.secretsDb || {})) {
+        const matches = (content || '').match(rule.pattern);
+        if (matches) {
+          secrets.push({
+            type: 'secret',
+            severity: rule.severity,
+            message: `Potential ${rule.vendor} secret found`,
+            file: filePath,
+            line: 1,
+            snippet: matches[0].substring(0, 80),
+            suggestion: rule.remediation,
+            confidence: 0.8,
+            tags: ['secret', rule.vendor.toLowerCase()],
+          });
+        }
+      }
+      allSecrets.push(...secrets);
     }
 
     return allSecrets;
