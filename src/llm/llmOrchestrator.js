@@ -10,6 +10,7 @@ const ENV_FALLBACKS = {
   gemini: 'GEMINI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  ollama: 'OLLAMA_HOST',
 };
 
 const SEVERITY_ORDER = {
@@ -527,6 +528,9 @@ export default class LLMOrchestrator {
       case 'openrouter':
         response = await this.callOpenRouter(provider, prompt, options);
         break;
+      case 'ollama':
+        response = await this.callOllama(provider, prompt, options);
+        break;
       case 'local':
       default:
         response =
@@ -644,6 +648,21 @@ export default class LLMOrchestrator {
       )
     );
     return response.data.choices[0]?.message?.content || '';
+  }
+
+  async callOllama(provider, prompt, options = {}) {
+    const host = provider.apiKey || 'http://localhost:11434';
+    const messages = this.buildMessages(options.systemPrompt, prompt);
+    const response = await enhancedRateLimiter.schedule('ollama', () =>
+      axios.post(`${host}/v1/chat/completions`, {
+        model: provider.model || 'llama3.2',
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        stream: false,
+        messages,
+      })
+    );
+    return response.data.choices?.[0]?.message?.content || '';
   }
 
   async callAnthropic(provider, prompt, options = {}) {

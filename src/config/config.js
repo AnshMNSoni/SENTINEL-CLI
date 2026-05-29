@@ -117,6 +117,14 @@ export class Config {
             weight: 0.22,
             apiKeyEnv: 'OPENROUTER_API_KEY',
           },
+          {
+            id: 'ollama-default',
+            provider: 'ollama',
+            model: 'llama3.2',
+            enabled: true,
+            weight: 0.22,
+            apiKeyEnv: 'OLLAMA_HOST',
+          },
         ],
         cache: {
           enabled: true,

@@ -42,11 +42,7 @@ async function ensureGradient() {
  * Load the most recent analysis report if available
  */
 async function loadLastAnalysis() {
-  const possiblePaths = [
-    'sentinel-report.json',
-    'report.json',
-    '.sentinel/last-analysis.json',
-  ];
+  const possiblePaths = ['sentinel-report.json', 'report.json', '.sentinel/last-analysis.json'];
 
   for (const reportPath of possiblePaths) {
     try {
@@ -68,10 +64,7 @@ function formatAnalysisContext(analysis) {
     return null;
   }
 
-  const lines = [
-    `Last analysis found ${analysis.issues.length} issues:`,
-    '',
-  ];
+  const lines = [`Last analysis found ${analysis.issues.length} issues:`, ''];
 
   // Group by severity
   const byType = {};
@@ -117,10 +110,8 @@ export async function runSentinelConsole(options = {}) {
   console.log(chalk.hex('#9B72CB')('Pulse ideas straight into the mesh. Type :exit to leave.\n'));
 
   if (orchestrator.providers.length === 0) {
-    console.log(
-      chalk.yellow('No AI providers enabled.')
-    );
-    console.log(chalk.gray('Run `sentinel auth` to configure your API keys.\n'));
+    console.log(chalk.yellow('No AI providers enabled.'));
+    console.log(chalk.gray('Use /auth in the Sentinel TUI to configure API keys.\n'));
     return;
   }
 
@@ -200,8 +191,8 @@ export async function runSentinelConsole(options = {}) {
         const preview = entry.response ? entry.response.slice(0, 160) : '[no response captured]';
         console.log(
           chalk.green('Sentinel: ') +
-          preview +
-          (entry.response && entry.response.length > 160 ? '...' : '')
+            preview +
+            (entry.response && entry.response.length > 160 ? '...' : '')
         );
         console.log(divider());
       });
@@ -216,7 +207,9 @@ export async function runSentinelConsole(options = {}) {
         spinner.succeed(`Loaded analysis with ${lastAnalysis.issues?.length || 0} issues`);
         console.log(chalk.gray('Use :explain to discuss issues, or ask questions with context.\n'));
       } else {
-        spinner.warn('No analysis report found. Run `sentinel analyze --format json -o report.json` first.');
+        spinner.warn(
+          'No analysis report found. Run `sentinel analyze --format json -o report.json` first.'
+        );
       }
       continue;
     }
@@ -232,7 +225,8 @@ export async function runSentinelConsole(options = {}) {
         continue;
       }
 
-      const question = prompt.replace(':explain', '').trim() || 'Explain these issues and suggest fixes.';
+      const question =
+        prompt.replace(':explain', '').trim() || 'Explain these issues and suggest fixes.';
       const responseText = await runSinglePrompt(question, analysisContext);
       history.push({ prompt: `:explain ${question}`, response: responseText });
       continue;
@@ -247,4 +241,3 @@ export async function runSentinelConsole(options = {}) {
 }
 
 export default runSentinelConsole;
-
