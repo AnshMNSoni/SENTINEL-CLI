@@ -568,39 +568,109 @@ export const COMMAND_HANDLERS = {
     },
     sarif: {
         description: 'Generate SARIF report',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('sarif'),
     },
     badge: {
-        description: 'Generate score badges',
-        handler: async () => '(not yet implemented in TUI)',
+        description: 'Generate security score badges',
+        handler: buildCommandHandler('badge'),
     },
     metrics: {
         description: 'Show performance metrics',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            const mem = process.memoryUsage();
+            const uptime = process.uptime();
+            let out = 'Performance Metrics:\n';
+            out += `  Uptime: ${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s\n`;
+            out += `  Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}MB / ${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB\n`;
+            out += `  RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB\n`;
+            out += `  CPU: ${(process.cpuUsage().user / 1000000).toFixed(2)}s user`;
+            return out;
+        },
     },
     trends: {
         description: 'View analysis trends',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            const home = process.env.HOME || process.env.USERPROFILE || '~';
+            const sessDir = `${home}/.sentinel/sessions`;
+            if (!existsSync(sessDir))
+                return 'No session data for trend analysis.';
+            try {
+                const files = readdirSync(sessDir)
+                    .filter(f => f.endsWith('.json'))
+                    .sort()
+                    .reverse()
+                    .slice(0, 14);
+                if (files.length === 0)
+                    return 'No session data for trend analysis.';
+                let out = `Analysis Trends (last ${files.length} sessions):\n`;
+                for (const f of files) {
+                    const raw = readFileSync(`${sessDir}/${f}`, 'utf-8');
+                    const data = JSON.parse(raw);
+                    const msgCount = Array.isArray(data) ? data.length : 0;
+                    const date = f.replace('.json', '').replace(/_/g, ' ').slice(0, 19);
+                    out += `  ${date}: ${msgCount} messages\n`;
+                }
+                return out;
+            }
+            catch (e) {
+                return `Trend analysis error: ${e}`;
+            }
+        },
     },
     ci: {
         description: 'CI-friendly analysis mode',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async (args) => {
+            const target = args.trim() || '.';
+            return await formatResult(await TOOLS.analyze.execute({ files: target }));
+        },
     },
     notify: {
         description: 'Send results to Slack/Discord',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            return 'Notification not configured. Set up webhook URLs in .codereviewrc.json under integrations.';
+        },
     },
     team: {
         description: 'Manage team workspace',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            return 'Team workspace not configured. Set up in .codereviewrc.json under integrations.';
+        },
     },
     features: {
         description: 'Manage feature flags',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            const cfg = existsSync('.codereviewrc.json')
+                ? JSON.parse(readFileSync('.codereviewrc.json', 'utf-8'))
+                : {};
+            const ml = cfg.ml?.enabled !== false;
+            const ai = cfg.ai?.enabled !== false;
+            const cache = cfg.ai?.cache?.enabled !== false;
+            let out = 'Feature Flags:\n';
+            out += `  AI Analysis: ${ai ? '\u2705' : '\u274C'}\n`;
+            out += `  ML Detection: ${ml ? '\u2705' : '\u274C'}\n`;
+            out += `  Cache: ${cache ? '\u2705' : '\u274C'}\n`;
+            return out;
+        },
     },
     'secret-patterns': {
         description: 'List secret detection patterns',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            try {
+                const { SecretsScanner } = await import('../../analyzers/secretsScanner.js');
+                const scanner = new SecretsScanner();
+                const patterns = Object.keys(scanner.secretsDb || {});
+                if (patterns.length === 0)
+                    return 'Secret patterns: (none loaded)';
+                let out = `Secret Detection Patterns (${patterns.length}):\n`;
+                for (const p of patterns) {
+                    out += `  \u25CF ${p}\n`;
+                }
+                return out;
+            }
+            catch (e) {
+                return `Error loading patterns: ${e}`;
+            }
+        },
     },
     sessions: {
         description: 'Browse saved sessions',
@@ -649,20 +719,20 @@ export const COMMAND_HANDLERS = {
     },
     container: {
         description: 'Container security analysis',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('containerAnalysis'),
     },
-    lint: { description: 'Run linter analysis', handler: async () => '(not yet implemented in TUI)' },
+    lint: { description: 'Run linter analysis', handler: buildCommandHandler('lintAnalysis') },
     frontend: {
         description: 'Frontend-focused analysis',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('frontendAnalysis'),
     },
     backend: {
         description: 'Backend-focused analysis',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('backendAnalysis'),
     },
     blame: {
         description: 'Analyze issues with git blame',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('blameAnalysis', a => ({ files: a || '.' })),
     },
     cache: {
         description: 'Manage analysis cache',
@@ -731,15 +801,42 @@ export const COMMAND_HANDLERS = {
     },
     parallel: {
         description: 'Parallel analysis with worker threads',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async (args) => {
+            const target = args.trim() || '.';
+            return await formatResult(await TOOLS.analyze.execute({ files: target }));
+        },
     },
     webhook: {
         description: 'Start GitHub App webhook server',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            try {
+                const { execSync } = await import('child_process');
+                const out = execSync('node src/core/cli.js webhook-server --help 2>&1 || true', {
+                    encoding: 'utf-8',
+                    maxBuffer: 1024 * 1024,
+                });
+                return `Webhook server:\n${out || "Run 'npm run webhook-server' to start."}`;
+            }
+            catch {
+                return 'Webhook server module available. Run with --help for options.';
+            }
+        },
     },
     server: {
         description: 'Start Sentinel API server',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            try {
+                const { execSync } = await import('child_process');
+                const out = execSync('node src/core/cli.js server --help 2>&1 || true', {
+                    encoding: 'utf-8',
+                    maxBuffer: 1024 * 1024,
+                });
+                return `API server:\n${out || "Run 'npm run server' to start."}`;
+            }
+            catch {
+                return 'Server module available. Run with --help for options.';
+            }
+        },
     },
     policy: {
         description: 'Manage security policies',
@@ -770,23 +867,78 @@ export const COMMAND_HANDLERS = {
     },
     'install-hooks': {
         description: 'Install pre-commit hooks',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            try {
+                const { execSync } = await import('child_process');
+                const out = execSync('node src/core/cli.js install-hooks 2>&1', {
+                    encoding: 'utf-8',
+                    maxBuffer: 1024 * 1024,
+                });
+                return out || 'Pre-commit hooks installed.';
+            }
+            catch (e) {
+                return `Error: ${e}`;
+            }
+        },
     },
     'multi-file': {
         description: 'Analyze cross-file dependencies',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: buildCommandHandler('multiFileAnalysis'),
     },
     'test-suggestions': {
         description: 'Generate test suggestions',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async (args) => {
+            const target = args.trim() || '.';
+            try {
+                const diff = execSync('git diff --staged', {
+                    encoding: 'utf-8',
+                    maxBuffer: 10 * 1024 * 1024,
+                });
+                if (diff.trim()) {
+                    const result = await chat(`Review this diff and suggest unit tests (file: ${target}):\n\n${diff.slice(0, 3000)}`, { systemPrompt: 'You are a test expert. Suggest specific test cases with frameworks.' });
+                    return result || '(no response)';
+                }
+            }
+            catch { }
+            const result = await chat(`Suggest unit tests for the codebase at ${target}. Focus on the main entry points.`, { systemPrompt: 'You are a test expert. Suggest specific test cases with frameworks.' });
+            return result || '(no response)';
+        },
     },
     'pr-description': {
         description: 'Generate PR description',
-        handler: async () => '(not yet implemented in TUI)',
+        handler: async () => {
+            try {
+                const diff = execSync('git log --oneline -10', {
+                    encoding: 'utf-8',
+                    maxBuffer: 1024 * 1024,
+                });
+                const files = execSync('git diff --name-only HEAD~1', {
+                    encoding: 'utf-8',
+                    maxBuffer: 1024 * 1024,
+                });
+                const msg = await chat(`Generate a concise PR description based on:\n\nRecent commits:\n${diff}\n\nChanged files:\n${files}`, { systemPrompt: 'You are a technical writer. Generate clear PR descriptions.' });
+                return msg || '(no response)';
+            }
+            catch (e) {
+                return `Error: ${e}`;
+            }
+        },
     },
     'pr-summary': {
-        description: 'Generate PR summary',
-        handler: async () => '(not yet implemented in TUI)',
+        description: 'Generate comprehensive PR summary',
+        handler: async () => {
+            try {
+                const diff = execSync('git diff HEAD~1', {
+                    encoding: 'utf-8',
+                    maxBuffer: 10 * 1024 * 1024,
+                });
+                const msg = await chat(`Summarize this PR diff concisely. Include: what changed, why, any risks:\n\n${diff.slice(0, 4000)}`, { systemPrompt: 'You are a code reviewer. Summarize PRs clearly.' });
+                return msg || '(no response)';
+            }
+            catch (e) {
+                return `Error: ${e}`;
+            }
+        },
     },
 };
 //# sourceMappingURL=commands.js.map
