@@ -147,44 +147,6 @@ program.hook('preAction', async thisCommand => {
 });
 
 // ========================================
-// TUI COMMAND - Modern Terminal UI (like Claude Code/OpenCode)
-// ========================================
-
-program
-  .command('tui')
-  .description('Launch the modern Terminal User Interface')
-  .option('--project <path>', 'Project path to analyze', '.')
-  .option('--theme <name>', 'Color theme: default, dark, light', 'default')
-  .option('--ai', 'Enable AI chat assistant', true)
-  .addHelpText(
-    'after',
-    `
-Examples:
-  sentinel tui                    # Start interactive TUI
-  sentinel tui --project ./myapp  # Specify project path
-  sentinel tui --theme dark       # Dark theme
-  sentinel tui --no-ai            # Disable AI features
-
-TUI Features:
-  • Interactive chat with AI assistant
-  • File explorer and operations
-  • Shell command execution
-  • Code analysis and fixing
-  • Web search and documentation lookup
-  • Git operations
-  • Project management
-`
-  )
-  .action(async options => {
-    try {
-      const { ModernTUI } = await import('../tui/modernTui.js');
-      const tui = new ModernTUI(options);
-      await tui.init();
-    } catch (error) {
-      console.error(chalk.red('TUI Error:'), error.message);
-      console.log(chalk.gray('Run "npm install" to ensure dependencies are installed.'));
-    }
-  });
 
 program
   .command('chat [message...]')
@@ -377,9 +339,9 @@ program
   .description('Open interactive shell mode')
   .action(async () => {
     try {
-      const { ModernTUI } = await import('../tui/modernTui.js');
-      const tui = new ModernTUI({ mode: 'shell' });
-      await tui.init();
+      const { createInteractiveMode } = await import('../interactive/interactiveMode.js');
+      const interactive = createInteractiveMode(process.cwd());
+      await interactive.start();
     } catch (error) {
       console.error(chalk.red('Shell Error:'), error.message);
     }
@@ -2902,7 +2864,7 @@ program
   .option('--no-interact', 'Run TUI without interactive mode')
   .action(async options => {
     try {
-      const { EnhancedTUI } = await import('../utils/enhancedTui.js');
+      const { default: EnhancedTUI } = await import('../utils/enhancedTui.js');
 
       console.log(chalk.cyan('🎨 Launching Sentinel TUI...'));
 

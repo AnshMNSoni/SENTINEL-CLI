@@ -1,50 +1,62 @@
-import chalk from 'chalk';
-import ora from 'ora';
-import { promises as fs } from 'fs';
-import path from 'path';
-
 import Config from './config/config.js';
 import GitUtils from './git/gitUtils.js';
+import chalk from 'chalk';
 import { SecurityAnalyzer } from './analyzers/securityAnalyzer.js';
 import { QualityAnalyzer } from './analyzers/qualityAnalyzer.js';
 import { BugAnalyzer } from './analyzers/bugAnalyzer.js';
 import { PerformanceAnalyzer } from './analyzers/performanceAnalyzer.js';
 import { DependencyAnalyzer } from './analyzers/dependencyAnalyzer.js';
 import { AccessibilityAnalyzer } from './analyzers/accessibilityAnalyzer.js';
-import { AIAnalyzer } from './analyzers/aiAnalyzer.js';
-import { CustomAnalyzer } from './analyzers/customAnalyzer.js';
 import { TypeScriptAnalyzer } from './analyzers/typescriptAnalyzer.js';
 import { ReactAnalyzer } from './analyzers/reactAnalyzer.js';
 import { APISecurityAnalyzer } from './analyzers/apiSecurityAnalyzer.js';
 import { EnvSecurityAnalyzer } from './analyzers/envSecurityAnalyzer.js';
 import { DockerAnalyzer } from './analyzers/dockerAnalyzer.js';
-import KubernetesAnalyzer from './analyzers/kubernetesAnalyzer.js';
 import ReportGenerator from './output/reportGenerator.js';
+import PolicyEngine from './core/policy/policyEngine.js';
+
+import {
+  AnalysisOrchestrator,
+  ParallelProcessor,
+  FalsePositiveReducer,
+  FeatureFlags,
+  globalEventBus,
+  globalMetrics,
+} from './core/index.js';
 
 const config = new Config();
-const gitUtils = new GitUtils();
 
 export class CodeReviewBot {
-  constructor() {
+  constructor(options = {}) {
     this.analyzers = [];
     this.reportGenerator = new ReportGenerator();
+    this.analysisOrchestrator = options.analysisOrchestrator || null;
+    this.parallelProcessor = null;
+    this.falsePositiveReducer = null;
+    this.featureFlags = null;
+    this.policyEngine = null;
+    this.eventBus = options.eventBus || globalEventBus;
+    this.metrics = options.metrics || globalMetrics;
+    this.gitUtils = new GitUtils();
+    this.isInitialized = false;
   }
+
 
   async initialize() {
     try {
       await config.load();
       await config.validate();
 
-      // Load global config and inject API keys into environment if missing
       try {
-        const { configManager } = await import('./config/configManager.js');
+        const { configManager } = await import('../config/configManager.js');
         await configManager.load();
         configManager.injectEnvVars();
       } catch (globalConfigError) {
         // Silently continue if global config fails
       }
 
-      // Initialize analyzers
+      await this.initializeScalableComponents();
+
       const enabledAnalyzers = config.getAnalyzers();
 
       if (enabledAnalyzers.includes('security')) {
@@ -63,64 +75,287 @@ export class CodeReviewBot {
         this.analyzers.push(new PerformanceAnalyzer(config));
       }
 
-      // Dependency vulnerability analyzer
       if (enabledAnalyzers.includes('dependency') || enabledAnalyzers.includes('deps')) {
         this.analyzers.push(new DependencyAnalyzer(config));
       }
 
-      // Accessibility (a11y) analyzer
       if (enabledAnalyzers.includes('accessibility') || enabledAnalyzers.includes('a11y')) {
         this.analyzers.push(new AccessibilityAnalyzer(config));
       }
 
-      // TypeScript-specific analyzer
       if (enabledAnalyzers.includes('typescript') || enabledAnalyzers.includes('ts')) {
         this.analyzers.push(new TypeScriptAnalyzer(config));
       }
 
-      // React-specific analyzer
       if (enabledAnalyzers.includes('react') || enabledAnalyzers.includes('jsx')) {
         this.analyzers.push(new ReactAnalyzer(config));
       }
 
-      // API Security analyzer
       if (enabledAnalyzers.includes('api') || enabledAnalyzers.includes('api-security')) {
         this.analyzers.push(new APISecurityAnalyzer(config));
       }
 
-      // Environment/Secrets analyzer
       if (enabledAnalyzers.includes('secrets') || enabledAnalyzers.includes('env')) {
         this.analyzers.push(new EnvSecurityAnalyzer(config));
       }
 
-      // Docker analyzer
       if (enabledAnalyzers.includes('docker') || enabledAnalyzers.includes('dockerfile')) {
         this.analyzers.push(new DockerAnalyzer(config));
       }
 
-      // Kubernetes analyzer
-      if (enabledAnalyzers.includes('kubernetes') || enabledAnalyzers.includes('k8s')) {
-        this.analyzers.push(new KubernetesAnalyzer(config));
-      }
+      this.isInitialized = true;
 
-      // Custom rules analyzer (always enabled if .sentinelrules exists)
-      if (enabledAnalyzers.includes('custom') || enabledAnalyzers.length > 0) {
-        this.analyzers.push(new CustomAnalyzer(config));
-      }
+      this.eventBus.emit('bot:initialized', {
+        analyzerCount: this.analyzers.length,
+        enabledAnalyzers,
+      });
 
-      // Initialize AI Analyzer if enabled in config
-      const aiConfig = config.get('ai');
-      if (aiConfig && aiConfig.enabled) {
-        this.analyzers.push(new AIAnalyzer(config));
-      }
+      return true;
     } catch (error) {
-      console.error(chalk.red('✗') + ` Failed to initialize: ${error.message}`);
-      throw error;
+      console.error('Failed to initialize CodeReviewBot:', error.message);
+      return false;
     }
   }
 
+  async initializeScalableComponents() {
+    const useParallel = config.get('analysis.enableParallelProcessing', true);
+
+    if (useParallel) {
+      this.parallelProcessor = new ParallelProcessor({
+        maxWorkers: config.get('analysis.maxWorkers', 4),
+        eventBus: this.eventBus,
+      });
+      await this.parallelProcessor.initialize();
+    }
+
+    this.falsePositiveReducer = new FalsePositiveReducer({
+      eventBus: this.eventBus,
+      metrics: this.metrics,
+      confidenceThreshold: config.get('ml.confidenceThreshold', 0.7),
+    });
+
+    this.featureFlags = new FeatureFlags({
+      storagePath: '.sentinel/feature-flags.json',
+    });
+    await this.featureFlags.load();
+
+    this.policyEngine = new PolicyEngine({
+      policyDir: '.sentinel/policies',
+      enforcementMode: config.get('policy.enforcementMode', 'advisory'),
+    });
+    await this.policyEngine.loadPolicies();
+
+    this.analysisOrchestrator = new AnalysisOrchestrator({
+      parallelProcessor: this.parallelProcessor,
+      falsePositiveReducer: this.falsePositiveReducer,
+      eventBus: this.eventBus,
+      metrics: this.metrics,
+    });
+
+    if (this.parallelProcessor) {
+      await this.analysisOrchestrator.initialize();
+    }
+  }
+
+  async analyzeFiles(files, options = {}) {
+    const timer = this.metrics.startTimer('bot.analyze-files');
+
+    this.eventBus.emit('analysis:start', {
+      fileCount: files.length,
+      options,
+    });
+
+    const useNewFramework = this.featureFlags?.isEnabled('new-analyzer-framework') ?? true;
+
+    let issues;
+
+    if (useNewFramework && this.analysisOrchestrator) {
+      const result = await this.analysisOrchestrator.analyze(files, {
+        parallel: options.parallel ?? true,
+        reduceFalsePositives: options.reduceFalsePositives ?? true,
+        timeout: options.timeout ?? 60000,
+      });
+
+      issues = result.issues;
+    } else {
+      issues = await this.analyzeFilesLegacy(files);
+    }
+
+    this.eventBus.emit('analysis:complete', {
+      issueCount: issues.length,
+    });
+
+    this.metrics.endTimer(timer);
+
+    return issues;
+  }
+
+  async analyzeFilesLegacy(files) {
+    const allIssues = [];
+
+    // Normalize files to objects { path, content }
+    const normalizedFiles = [];
+    const { readFileSync, existsSync, statSync } = await import('fs');
+    const { join } = await import('path');
+    const { globSync } = await import('glob');
+
+    const EXCLUDE_DIRS = [
+      'node_modules',
+      '.git',
+      'dist',
+      'build',
+      '.next',
+      '.cache',
+      'coverage',
+      '.venv',
+      'venv',
+    ];
+
+    for (const file of files) {
+      const filePath = typeof file === 'string' ? file : file?.path;
+      if (!filePath) continue;
+
+      if (existsSync(filePath) && statSync(filePath).isDirectory()) {
+        const matches = globSync(
+          '**/*.{js,ts,jsx,tsx,mjs,cjs,json,yaml,yml,py,rs,go,java,kt,cs,cpp,c,h,hpp}',
+          {
+            cwd: filePath,
+            nodir: true,
+            ignore: EXCLUDE_DIRS.map(d => `**/${d}/**`),
+          }
+        );
+        for (const m of matches) {
+          const fullPath = join(filePath, m);
+          try {
+            const content = readFileSync(fullPath, 'utf-8');
+            normalizedFiles.push({ path: fullPath, content });
+          } catch {}
+        }
+      } else {
+        try {
+          const content = typeof file === 'object' && file?.content !== undefined
+            ? file.content
+            : readFileSync(filePath, 'utf-8');
+          normalizedFiles.push({ path: filePath, content });
+        } catch {}
+      }
+    }
+
+    for (const analyzer of this.analyzers) {
+      const analyzerTimer = this.metrics.startTimer(`analyzer.${analyzer.name}`);
+
+      try {
+        if (typeof analyzer.analyzeFiles === 'function') {
+          const issues = await analyzer.analyzeFiles(normalizedFiles, {});
+          allIssues.push(...issues);
+        } else if (typeof analyzer.analyze === 'function') {
+          const issues = await analyzer.analyze(normalizedFiles, {});
+          allIssues.push(...issues);
+        }
+      } catch (error) {
+        this.eventBus.emit('analyzer:error', {
+          analyzer: analyzer.name,
+          error: error.message,
+        });
+      }
+
+      this.metrics.endTimer(analyzerTimer);
+    }
+
+    return allIssues;
+  }
+
+  async evaluatePolicies(issues, options = {}) {
+    if (!this.policyEngine || !this.policyEngine.policies.size) {
+      return null;
+    }
+
+    const context = {
+      runId: options.runId,
+      branch: options.branch,
+      commit: options.commit,
+    };
+
+    const result = this.policyEngine.evaluate(issues, context);
+
+    this.eventBus.emit('policy:evaluated', {
+      policyCount: this.policyEngine.policies.size,
+      violations: result.violations.length,
+      passed: result.passed.length,
+      score: result.score,
+    });
+
+    return result;
+  }
+
+  checkPolicyGate(policyResult, options = {}) {
+    if (!policyResult) return { shouldFail: false };
+
+    const failOnScore = options.failOnScore ?? 0;
+    const failOnSeverity = options.failOnSeverity || 'critical';
+
+    const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
+    const failSeverityIndex = severityOrder.indexOf(failOnSeverity.toLowerCase());
+
+    if (policyResult.score < failOnScore) {
+      return {
+        shouldFail: true,
+        reason: `Policy score ${policyResult.score} below threshold ${failOnScore}`,
+        policyResult,
+      };
+    }
+
+    const failingViolations = policyResult.violations.filter(v => {
+      const vIndex = severityOrder.indexOf(v.severity?.toLowerCase());
+      return vIndex >= failSeverityIndex;
+    });
+
+    if (failingViolations.length > 0) {
+      return {
+        shouldFail: true,
+        reason: `${failingViolations.length} violations at or above '${failOnSeverity}' severity`,
+        policyResult,
+        failingViolations,
+      };
+    }
+
+    return { shouldFail: false, policyResult };
+  }
+
+  async shutdown() {
+    if (this.analysisOrchestrator) {
+      await this.analysisOrchestrator.shutdown();
+    }
+
+    if (this.parallelProcessor) {
+      await this.parallelProcessor.shutdown();
+    }
+
+    if (this.featureFlags) {
+      this.featureFlags.stopAutoRefresh();
+    }
+
+    this.eventBus.emit('bot:shutdown');
+
+    this.isInitialized = false;
+  }
+
+  getMetrics() {
+    return {
+      analyzerCount: this.analyzers.length,
+      orchestrator: this.analysisOrchestrator?.getMetrics() ?? null,
+      parallelProcessor: this.parallelProcessor?.getMetrics() ?? null,
+      falsePositiveReducer: this.falsePositiveReducer?.getStatistics() ?? null,
+      policyEngine: {
+        loadedPolicies: this.policyEngine?.policies.size ?? 0,
+        policies: this.policyEngine?.getAllPolicies() ?? [],
+      },
+      isInitialized: this.isInitialized,
+    };
+  }
 
   async runAnalysis(options = {}) {
+    const ora = (await import('ora')).default;
     const spinner = options.silent ? null : ora('Running code analysis...').start();
 
     try {
@@ -129,24 +364,16 @@ export class CodeReviewBot {
 
       if (files.length === 0) {
         if (spinner) spinner.warn('No files to analyze');
-        return [];
+        return { report: '', issues: [] };
       }
 
       if (spinner) spinner.text = `Analyzing ${files.length} files...`;
 
-      // Run all analyzers
-      const allIssues = [];
+      // Run code review bot analysis
+      const allIssues = await this.analyzeFiles(files, options);
 
-      for (const analyzer of this.analyzers) {
-        const issues = await analyzer.analyze(files, {
-          commit: options.commit,
-          branch: options.branch,
-          staged: options.staged,
-        });
-
-        allIssues.push(...issues);
-        if (spinner) spinner.text = `${analyzer.getName()}: ${issues.length} issues found`;
-      }
+      // Evaluate policies
+      const policyResult = await this.evaluatePolicies(allIssues, options);
 
       // Generate report
       const report = await this.reportGenerator.generate(allIssues, {
@@ -162,7 +389,7 @@ export class CodeReviewBot {
         this.displayResults(allIssues);
       }
 
-      return { report, issues: allIssues };
+      return { report, issues: allIssues, policyResult };
     } catch (error) {
       if (spinner) spinner.fail('Analysis failed');
       throw error;
@@ -171,6 +398,8 @@ export class CodeReviewBot {
 
   async getFilesToAnalyze(options) {
     const files = [];
+    const { promises: fs } = await import('fs');
+    const path = await import('path');
 
     try {
       if (options.files && options.files.length > 0) {
@@ -198,13 +427,12 @@ export class CodeReviewBot {
         }
       } else if (options.commit) {
         // Analyze specific commit
-        const changes = await gitUtils.getCommitChanges(options.commit);
-        const parsedFiles = gitUtils.parseDiff(changes.diff);
+        const changes = await this.gitUtils.getCommitChanges(options.commit);
+        const parsedFiles = this.gitUtils.parseDiff(changes.diff);
 
         for (const file of parsedFiles) {
-          // Skip deleted files or unknown
           if (file.path !== 'unknown') {
-            const content = await gitUtils.getFileContentAtCommit(file.path, options.commit);
+            const content = await this.gitUtils.getFileContentAtCommit(file.path, options.commit);
             if (content) {
               files.push({
                 path: file.path,
@@ -216,12 +444,12 @@ export class CodeReviewBot {
         }
       } else if (options.branch) {
         // Analyze branch changes
-        const changes = await gitUtils.getBranchDiff('main', options.branch);
-        const parsedFiles = gitUtils.parseDiff(changes.diff);
+        const changes = await this.gitUtils.getBranchDiff('main', options.branch);
+        const parsedFiles = this.gitUtils.parseDiff(changes.diff);
 
         for (const file of parsedFiles) {
           if (file.path !== 'unknown') {
-            const content = await gitUtils.getFileContent(file.path);
+            const content = await this.gitUtils.getFileContent(file.path);
             if (content) {
               files.push({
                 path: file.path,
@@ -233,20 +461,19 @@ export class CodeReviewBot {
         }
       } else if (options.staged) {
         // Analyze staged changes
-        const changes = await gitUtils.getStagedChanges();
-        const parsedFiles = gitUtils.parseDiff(changes.diff);
+        const changes = await this.gitUtils.getStagedChanges();
+        const parsedFiles = this.gitUtils.parseDiff(changes.diff);
 
         for (const file of parsedFiles) {
           if (file.path !== 'unknown') {
             try {
-              const content = await gitUtils.git.show([`:${file.path}`]);
+              const content = await this.gitUtils.git.show([`:${file.path}`]);
               files.push({
                 path: file.path,
                 content: content,
                 type: 'staged',
               });
             } catch (e) {
-              // Fallback if index lookup fails, try FS but warn
               try {
                 const content = await fs.readFile(file.path, 'utf8');
                 files.push({
@@ -255,20 +482,20 @@ export class CodeReviewBot {
                   type: 'staged',
                 });
               } catch (fsErr) {
-                // Fallback read failed, skip this file
+                // Skip
               }
             }
           }
         }
       } else {
         // Analyze latest commit
-        const changes = await gitUtils.getLatestCommitChanges();
+        const changes = await this.gitUtils.getLatestCommitChanges();
         if (changes.files.length > 0) {
-          const parsedFiles = gitUtils.parseDiff(changes.diff);
+          const parsedFiles = this.gitUtils.parseDiff(changes.diff);
 
           for (const file of parsedFiles) {
             if (file.path !== 'unknown') {
-              const content = await gitUtils.getFileContent(file.path);
+              const content = await this.gitUtils.getFileContent(file.path);
               if (content) {
                 files.push({
                   path: file.path,
@@ -285,13 +512,7 @@ export class CodeReviewBot {
       return [];
     }
 
-    // Filter files based on configuration
-    return files.filter(file => {
-      if (this.analyzers.length > 0) {
-        return this.analyzers[0].shouldAnalyzeFile(file.path);
-      }
-      return true;
-    });
+    return files;
   }
 
   displayResults(issues) {
@@ -360,17 +581,11 @@ export class CodeReviewBot {
     console.log(chalk.gray('  ┌── ' + '─'.repeat(45)));
     console.log(`  │ ${color('●')} ${chalk.bold.white(issue.title)}`);
 
-    // File location
     const location = `${issue.file}:${issue.line}${issue.column ? ':' + issue.column : ''}`;
     console.log(`  │ 📂 ${chalk.cyan(location)}`);
-
-    // Message
     console.log(`  │ 💬 ${chalk.white(issue.message)}`);
-
-    // Type/Analyzer info
     console.log(`  │ 🏷️  ${chalk.dim(issue.type)} | ${chalk.dim(issue.analyzer)}`);
 
-    // Code Snippet
     if (issue.snippet && issue.snippet.length > 0) {
       console.log('  │');
       console.log(`  │ ${chalk.dim('Code Context:')}`);
@@ -379,7 +594,6 @@ export class CodeReviewBot {
       });
     }
 
-    // Suggestion
     if (issue.suggestion) {
       console.log('  │');
       console.log(`  │ ✨ ${chalk.hex('#34A853')('Suggestion:')} ${chalk.white(issue.suggestion)}`);
@@ -420,170 +634,6 @@ export class CodeReviewBot {
     };
     return icons[severity] || '•';
   }
-
-  async setupConfiguration() {
-    const inquirer = (await import('inquirer')).default;
-
-    const basicQuestions = [
-      {
-        type: 'checkbox',
-        name: 'analyzers',
-        message: 'Which analyzers would you like to enable?',
-        choices: [
-          { name: 'Security Analyzer (detects vulnerabilities)', value: 'security', checked: true },
-          { name: 'Quality Analyzer (checks code quality)', value: 'quality', checked: true },
-          { name: 'Bug Analyzer (finds common bugs)', value: 'bugs', checked: true },
-          {
-            name: 'Performance Analyzer (identifies performance issues)',
-            value: 'performance',
-            checked: true,
-          },
-          {
-            name: 'Dependency Analyzer (scans for vulnerable packages)',
-            value: 'dependency',
-            checked: true,
-          },
-          {
-            name: 'Accessibility Analyzer (WCAG compliance checks)',
-            value: 'accessibility',
-            checked: false,
-          },
-          {
-            name: 'Docker Analyzer (Dockerfile security & best practices)',
-            value: 'docker',
-            checked: true,
-          },
-          {
-            name: 'Kubernetes Analyzer (K8s manifest security)',
-            value: 'kubernetes',
-            checked: true,
-          },
-        ],
-      },
-      {
-        type: 'confirm',
-        name: 'blocking',
-        message: 'Should the bot block commits with critical issues?',
-        default: false,
-      },
-      {
-        type: 'list',
-        name: 'format',
-        message: 'Default output format?',
-        choices: [
-          { name: 'Console (colored text output)', value: 'console', checked: true },
-          { name: 'JSON (machine-readable)', value: 'json' },
-          { name: 'HTML (web report)', value: 'html' },
-          { name: 'Markdown (documentation)', value: 'markdown' },
-        ],
-        default: 'console',
-      },
-      {
-        type: 'confirm',
-        name: 'enableAI',
-        message: 'Enable AI Analysis?',
-        default: false,
-      },
-    ];
-
-    const answers = await inquirer.prompt(basicQuestions);
-
-    let aiSettings = {};
-    if (answers.enableAI) {
-      const aiQuestions = [
-        {
-          type: 'list',
-          name: 'provider',
-          message: 'Select AI Provider:',
-          choices: [
-            { name: 'OpenAI (GPT-3.5/4)', value: 'openai' },
-            { name: 'Anthropic (Claude)', value: 'anthropic' },
-            { name: 'Google (Gemini)', value: 'gemini' },
-            { name: 'Groq (Llama3/Mixtral)', value: 'groq' },
-            { name: 'OpenRouter (Various Models)', value: 'openrouter' },
-          ],
-          default: 'openai',
-        },
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'Enter your API Key (hidden):',
-          mask: '*',
-        },
-      ];
-      aiSettings = await inquirer.prompt(aiQuestions);
-
-      if (aiSettings.apiKey) {
-        try {
-          const { default: sentinelManager } = await import('./config/sentinelManager.js');
-          const globalConfig = await sentinelManager.load();
-
-          if (!globalConfig.providers) globalConfig.providers = {};
-
-          const p = aiSettings.provider;
-          if (!globalConfig.providers[p]) globalConfig.providers[p] = { apiKey: '', disabled: false };
-          globalConfig.providers[p].apiKey = aiSettings.apiKey;
-          globalConfig.providers[p].disabled = false;
-
-          await sentinelManager.save(globalConfig);
-          console.log(chalk.green('✓') + ` API Key for ${aiSettings.provider} saved to global config (~/.sentinel/config.json)`);
-        } catch (error) {
-          console.error(chalk.red('✗') + ` Failed to save API Key to global config: ${error.message}`);
-        }
-      } else {
-        console.log(chalk.yellow('⚠ No API key provided. You will need to set it manually.'));
-      }
-    }
-
-    // Update project-local configuration
-    config.set('analysis.enabledAnalyzers', answers.analyzers);
-    config.set('integrations.precommit.blocking', answers.blocking);
-    config.set('output.format', answers.format);
-
-    if (answers.enableAI) {
-      config.set('ai.enabled', true);
-      config.set('ai.provider', aiSettings.provider);
-
-      // Set default models based on provider
-      let model = 'gpt-3.5-turbo';
-      if (aiSettings.provider === 'anthropic') model = 'claude-3-opus-20240229';
-      if (aiSettings.provider === 'gemini') model = 'gemini-1.5-flash';
-      if (aiSettings.provider === 'groq') model = 'llama3-70b-8192';
-
-      config.set('ai.model', model);
-    } else {
-      config.set('ai.enabled', false);
-    }
-
-    await config.save();
-    console.log(chalk.green('✓') + ' Project configuration saved successfully!');
-    return true;
-  }
-
-  async showStats() {
-    const stats = await gitUtils.getRepositoryStats();
-    const totalIssues = await this.getTotalIssuesCount();
-    return { stats, totalIssues };
-  }
-
-  async getTotalIssuesCount() {
-    try {
-      if (this.analyzers.length === 0) return 0;
-
-      const files = await this.getFilesToAnalyze({});
-      let totalIssues = 0;
-
-      for (const analyzer of this.analyzers) {
-        // Skip AI for quick stats as it costs money
-        if (analyzer.getName() === 'AIAnalyzer') continue;
-
-        await analyzer.analyze(files, {});
-        totalIssues += analyzer.getIssues().length;
-      }
-
-      return totalIssues;
-    } catch (error) {
-      return 0;
-    }
-  }
 }
+export default CodeReviewBot;
+

@@ -100,7 +100,8 @@ const displayBanner = async (options = {}) => {
 
 program
   .name('sentinel')
-  .description(`Sentinel CLI – AI-Powered Code Guardian
+  .description(
+    `Sentinel CLI – AI-Powered Code Guardian
 
   A comprehensive code review tool with:
   • Security scanning (XSS, SQL injection, secrets)
@@ -110,8 +111,9 @@ program
   • API security scanning
   • GitHub PR integration
   • Slack/Discord notifications
-  • SARIF output for GitHub Security`)
-  .version('1.8.0')
+  • SARIF output for GitHub Security`
+  )
+  .version('1.9.0')
   .option('--banner-message <text>', 'Banner text', 'SENTINEL')
   .option('--banner-font <name>', 'Figlet font name', 'Standard')
   .option('--banner-gradient <name>', 'Banner gradient: aqua|fire|rainbow|aurora|mono', 'aqua')
@@ -119,7 +121,7 @@ program
   .option('--no-banner-color', 'Disable banner gradients');
 
 let bannerShown = false;
-const showBannerOnce = async (command) => {
+const showBannerOnce = async command => {
   if (bannerShown) return;
   bannerShown = true; // Set immediately to prevent race conditions from bubbling hooks
 
@@ -140,9 +142,210 @@ const showBannerOnce = async (command) => {
   }
 };
 
-program.hook('preAction', async (thisCommand) => {
+program.hook('preAction', async thisCommand => {
   await showBannerOnce(thisCommand);
 });
+
+// ========================================
+
+program
+  .command('chat [message...]')
+  .description('Quick AI chat (shorthand for TUI chat mode)')
+  .option('-m, --model <name>', 'AI model to use', 'mixtral')
+  .option('--no-stream', 'Disable streaming responses')
+  .action(async (message, options) => {
+    try {
+      const { UniversalAgent } = await import('./agents/universalAgent.js');
+      const agent = new UniversalAgent({ projectPath: process.cwd() });
+
+      if (message && message.length > 0) {
+        const response = await agent.chat(message.join(' '), {
+          model: options.model,
+          stream: options.stream,
+        });
+        console.log(chalk.cyan('Sentinel:'), response);
+      } else {
+        console.log(chalk.yellow('Enter interactive chat mode with: sentinel tui'));
+      }
+    } catch (error) {
+      console.error(chalk.red('Chat Error:'), error.message);
+    }
+  });
+
+program
+  .command('agent <task>')
+  .description('Run an autonomous agent to complete a complex task')
+  .option('-i, --iterations <n>', 'Maximum iterations', v => parseInt(v), 10)
+  .option('--model <name>', 'AI model to use')
+  .option('-v, --verbose', 'Verbose output')
+  .addHelpText(
+    'after',
+    `
+Examples:
+  sentinel agent "fix all security vulnerabilities"
+  sentinel agent "add authentication to the API" --verbose
+  sentinel agent "write tests for user module"
+
+The agent will:
+  1. Analyze the task
+  2. Gather necessary information
+  3. Execute commands and make changes
+  4. Report results
+`
+  )
+  .action(async (task, options) => {
+    try {
+      const { UniversalAgent } = await import('./agents/universalAgent.js');
+      const agent = new UniversalAgent({
+        projectPath: process.cwd(),
+        maxIterations: options.iterations,
+      });
+
+      console.log(chalk.cyan('Running agent:'), task);
+      console.log(chalk.gray('─'.repeat(50)));
+
+      const result = await agent.run(task, { verbose: options.verbose });
+
+      if (result.success) {
+        console.log(chalk.green('\n✓ Task completed'));
+        console.log(chalk.gray(`Iterations: ${result.iterations}`));
+      } else {
+        console.log(chalk.yellow('\n⚠ Task may be incomplete'));
+        console.log(chalk.gray(`Iterations: ${result.iterations}/${options.iterations}`));
+      }
+
+      console.log(chalk.cyan('\nResult:'), result.result);
+    } catch (error) {
+      console.error(chalk.red('Agent Error:'), error.message);
+    }
+  });
+
+program
+  .command('exec <command>')
+  .description('Execute a shell command')
+  .option('-d, --dir <path>', 'Working directory')
+  .option('-t, --timeout <ms>', 'Timeout in milliseconds', v => parseInt(v), 60000)
+  .action(async (command, options) => {
+    try {
+      const { ShellExecutor } = await import('./utils/shellExecutor.js');
+      const shell = new ShellExecutor({
+        cwd: options.dir || process.cwd(),
+        timeout: options.timeout,
+      });
+
+      const result = await shell.exec(command);
+
+      if (result.stdout) console.log(result.stdout);
+      if (result.stderr) console.log(chalk.red(result.stderr));
+
+      process.exit(result.exitCode);
+    } catch (error) {
+      console.error(chalk.red('Exec Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('run <command>')
+  .description('Alias for exec - run a shell command')
+  .action(async command => {
+    const { ShellExecutor } = await import('./utils/shellExecutor.js');
+    const shell = new ShellExecutor({ cwd: process.cwd() });
+    const result = await shell.exec(command);
+    if (result.stdout) console.log(result.stdout);
+    if (result.stderr) console.log(chalk.red(result.stderr));
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('search <query>')
+  .description('Search the web for information')
+  .option('-n, --num <number>', 'Number of results', v => parseInt(v), 10)
+  .option('--code', 'Search for code examples')
+  .option('--docs', 'Search for documentation')
+  .action(async (query, options) => {
+    try {
+      const { WebIntelligence } = await import('./utils/webIntelligence.js');
+      const web = new WebIntelligence();
+
+      console.log(chalk.cyan('Searching:'), query);
+
+      let result;
+      if (options.code) {
+        result = await web.searchCode(query);
+      } else if (options.docs) {
+        result = await web.searchDocs(query);
+      } else {
+        result = await web.search(query, { numResults: options.num });
+      }
+
+      if (result.success && result.results.length > 0) {
+        console.log(chalk.green(`\nFound ${result.count} results:\n`));
+        result.results.forEach((r, i) => {
+          console.log(chalk.yellow(`${i + 1}. ${r.title}`));
+          console.log(chalk.gray(`   ${r.url}`));
+          if (r.snippet) {
+            console.log(chalk.white(`   ${r.snippet.slice(0, 150)}...`));
+          }
+          console.log('');
+        });
+      } else if (!result.success && result.message) {
+        console.log(chalk.yellow(result.message));
+        if (result.suggestion) {
+          console.log(chalk.gray(result.suggestion));
+        }
+      } else {
+        console.log(chalk.yellow('No results found'));
+      }
+    } catch (error) {
+      console.error(chalk.red('Search Error:'), error.message);
+    }
+  });
+
+program
+  .command('fetch <url>')
+  .description('Fetch content from a URL')
+  .option('-o, --output <file>', 'Save to file')
+  .option('-m, --max-length <n>', 'Max characters to fetch', v => parseInt(v), 50000)
+  .action(async (url, options) => {
+    try {
+      const { WebIntelligence } = await import('./utils/webIntelligence.js');
+      const web = new WebIntelligence();
+
+      console.log(chalk.cyan('Fetching:'), url);
+
+      const result = await web.fetch(url, { maxLength: options.maxLength });
+
+      if (result.success) {
+        console.log(chalk.green('✓ Fetched'), chalk.gray(`${result.length} bytes`));
+        console.log(chalk.gray('─'.repeat(50)));
+        console.log(result.content);
+
+        if (options.output) {
+          const { writeFile } = await import('fs/promises');
+          await writeFile(options.output, result.content);
+          console.log(chalk.green(`\nSaved to: ${options.output}`));
+        }
+      } else {
+        console.log(chalk.red('✗ Failed:'), result.error || `HTTP ${result.statusCode}`);
+      }
+    } catch (error) {
+      console.error(chalk.red('Fetch Error:'), error.message);
+    }
+  });
+
+program
+  .command('shell')
+  .description('Open interactive shell mode')
+  .action(async () => {
+    try {
+      const { createInteractiveMode } = await import('./interactive/interactiveMode.js');
+      const interactive = createInteractiveMode(process.cwd());
+      await interactive.start();
+    } catch (error) {
+      console.error(chalk.red('Shell Error:'), error.message);
+    }
+  });
 
 // ========================================
 // AUTH COMMAND - Primary way to configure API keys
@@ -150,7 +353,9 @@ program.hook('preAction', async (thisCommand) => {
 program
   .command('auth [subcommand] [provider]')
   .description('Configure API keys for AI providers')
-  .addHelpText('after', `
+  .addHelpText(
+    'after',
+    `
 Subcommands:
   login       Interactive API key setup (default)
   status      Show configured providers
@@ -158,17 +363,16 @@ Subcommands:
   set <name>  Set a specific provider's key
 
 Examples:
-  sentinel auth              # Start interactive setup
-  sentinel auth status       # Check configured providers
-  sentinel auth set openai   # Set OpenAI API key
-  sentinel auth logout       # Clear all keys
+  sentinel                   # Launch the TUI
+  # Then use /auth or /models in the TUI to manage providers
 
 Configuration:
   Sentinel looks for .sentinel.json in:
   1. Current directory (highest priority)
   2. $XDG_CONFIG_HOME/sentinel/
   3. $HOME/ (global config)
-`)
+`
+  )
   .action(async (subcommand, provider) => {
     try {
       const { runAuthCommand } = await import('./cli/authCommand.js');
@@ -187,7 +391,7 @@ program
   .option('--list', 'Show current configuration (API keys are masked)')
   .option('--open', 'Open configuration file in default editor')
   .option('--path', 'Show configuration file path')
-  .action(async (options) => {
+  .action(async options => {
     try {
       const { configManager } = await import('./config/configManager.js');
       await configManager.load();
@@ -200,7 +404,12 @@ program
       if (options.open) {
         const { exec } = await import('child_process');
         const configPath = configManager.configPath || configManager.getDefaultConfigPath();
-        const opener = process.platform === 'win32' ? 'start ""' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+        const opener =
+          process.platform === 'win32'
+            ? 'start ""'
+            : process.platform === 'darwin'
+              ? 'open'
+              : 'xdg-open';
         exec(`${opener} "${configPath}"`);
         console.log(chalk.green(`Opening ${configPath}...`));
         return;
@@ -260,9 +469,8 @@ program
       console.log('  sentinel config --open      Open config file in editor');
       console.log('  sentinel config --path      Show config file path');
       console.log('');
-      console.log(chalk.cyan('💡 To configure API keys, use: sentinel auth'));
+      console.log(chalk.cyan('💡 To configure API keys, launch the TUI and use /auth'));
       console.log('');
-
     } catch (error) {
       console.error(chalk.red('Config failed:'), error.message);
     }
@@ -285,18 +493,65 @@ program
   .option('--all-analyzers', 'Enable all available analyzers')
   .option('--save-history', 'Save analysis to trend history')
   .option('--silent', 'Suppress output (useful for scripting)')
+  .option('--pr <base-branch>', 'Analyze PR/diff against a base branch')
+  .option('--fail-on <severity>', 'Fail when severity at or above threshold')
+  .option('--policy-enable', 'Enable policy evaluation')
+  .option('--policy-pack <name>', 'Policy pack to use (security,compliance,strict-ci)', 'security')
+  .option('--policy-fail-score <number>', 'Fail if policy score below threshold', '70')
+  .option('--baseline <file>', 'Load baseline issues JSON to compare')
+  .option('--baseline-save <file>', 'Save current issues as baseline JSON')
+  .option('--new-only', 'Only report issues not present in baseline')
   .action(async (files, options) => {
     try {
       // Handle analyzer selection
       if (options.allAnalyzers) {
-        process.env.SENTINEL_ANALYZERS = 'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,docker,kubernetes,custom';
+        process.env.SENTINEL_ANALYZERS =
+          'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,docker,kubernetes,custom';
       } else if (options.analyzers) {
         process.env.SENTINEL_ANALYZERS = options.analyzers;
       }
 
       const bot = new CodeReviewBot();
       await bot.initialize();
-      const result = await bot.runAnalysis({ ...options, files });
+      let result = await bot.runAnalysis({ ...options, files });
+
+      // Baseline comparison
+      let baselineSet = null;
+      const normalize = issue =>
+        `${(issue.file || '').toLowerCase()}:${issue.line || 0}:${(issue.title || '').toLowerCase()}`;
+      if (options.baseline) {
+        try {
+          const baselinePath = path.resolve(process.cwd(), options.baseline);
+          const baselineText = await fs.readFile(baselinePath, 'utf8');
+          const baselineIssues = JSON.parse(baselineText);
+          baselineSet = new Set(baselineIssues.map(normalize));
+          const newIssues = (result.issues || []).filter(i => !baselineSet.has(normalize(i)));
+          if (options.newOnly) {
+            result = { ...result, issues: newIssues };
+          }
+        } catch (e) {
+          console.warn(chalk.yellow('⚠') + ` Could not load baseline: ${e.message}`);
+        }
+      }
+
+      // Save baseline if requested
+      if (options.baselineSave && result.issues) {
+        try {
+          const baselineOut = path.resolve(process.cwd(), options.baselineSave);
+          const baselineData = result.issues.map(i => ({
+            file: i.file,
+            line: i.line,
+            title: i.title,
+            severity: i.severity,
+          }));
+          await fs.writeFile(baselineOut, JSON.stringify(baselineData, null, 2), 'utf8');
+          if (!options.silent) {
+            console.log(chalk.green('✓') + ` Baseline saved to ${baselineOut}`);
+          }
+        } catch (e) {
+          console.warn(chalk.yellow('⚠') + ` Could not save baseline: ${e.message}`);
+        }
+      }
 
       // Save to history if requested
       if (options.saveHistory && result.issues) {
@@ -322,6 +577,82 @@ program
           console.log(chalk.green('✓') + ` SARIF report saved to ${outputPath}`);
         }
       }
+
+      // Fail-on severity gating for CI
+      if (options.failOn && result && result.issues) {
+        const order = ['info', 'low', 'medium', 'high', 'critical'];
+        const idx = order.indexOf(String(options.failOn).toLowerCase());
+        if (idx !== -1) {
+          const failing = result.issues.filter(
+            i => order.indexOf(String(i.severity).toLowerCase()) >= idx
+          );
+          if (failing.length > 0) {
+            console.error(chalk.red(`✗ ${failing.length} issues at or above '${options.failOn}'`));
+            process.exit(1);
+          }
+        }
+      }
+
+      // Policy evaluation
+      if (options.policyEnable && result.issues) {
+        try {
+          const policyResult = await bot.evaluatePolicies(result.issues, {
+            runId: result.runId,
+            branch: options.branch,
+            commit: options.commit,
+          });
+
+          if (policyResult && !options.silent) {
+            console.log(chalk.cyan('\n📋 Policy Evaluation Results:'));
+            console.log(chalk.gray(`  Score: ${policyResult.score}/100`));
+            console.log(chalk.gray(`  Compliant: ${policyResult.compliant ? 'Yes' : 'No'}`));
+            console.log(chalk.gray(`  Policies Passed: ${policyResult.passed.length}`));
+            console.log(chalk.gray(`  Violations: ${policyResult.violations.length}`));
+
+            if (policyResult.failGate) {
+              console.log(
+                chalk.gray(
+                  `  Fail Gate: ${policyResult.failGate.shouldFail ? 'TRIGGERED' : 'PASSED'}`
+                )
+              );
+              if (policyResult.failGate.highestSeverity !== 'none') {
+                console.log(
+                  chalk.gray(`  Highest Severity: ${policyResult.failGate.highestSeverity}`)
+                );
+              }
+            }
+
+            if (policyResult.violations.length > 0) {
+              console.log(chalk.yellow('\n⚠️ Policy Violations:'));
+              for (const v of policyResult.violations.slice(0, 5)) {
+                console.log(
+                  chalk.yellow(`  - ${v.policyName}: ${v.violations.length} violation(s)`)
+                );
+              }
+            }
+          }
+
+          // Fail on policy gate
+          if (policyResult) {
+            const policyGateResult = bot.checkPolicyGate(policyResult, {
+              failOnScore: parseInt(options.policyFailScore) || 70,
+              failOnSeverity: options.failOn || 'critical',
+            });
+
+            if (policyGateResult.shouldFail) {
+              console.error(chalk.red(`\n✗ Policy gate failed: ${policyGateResult.reason}`));
+              if (policyGateResult.failingViolations) {
+                console.error(
+                  chalk.red(`  Failing violations: ${policyGateResult.failingViolations.length}`)
+                );
+              }
+              process.exit(1);
+            }
+          }
+        } catch (policyError) {
+          console.warn(chalk.yellow(`⚠ Policy evaluation failed: ${policyError.message}`));
+        }
+      }
     } catch (error) {
       console.error(chalk.red('Analysis failed:'), error.message);
       process.exit(1);
@@ -331,7 +662,11 @@ program
 program
   .command('agents ci [input]')
   .description('Run multi-agent analysis with CI defaults (SARIF/JUnit, gating)')
-  .option('-f, --format <format>', 'Output format (console|json|markdown|html|sarif|junit)', 'console')
+  .option(
+    '-f, --format <format>',
+    'Output format (console|json|markdown|html|sarif|junit)',
+    'console'
+  )
   .option('--sarif-out <file>', 'Write SARIF output to file', '.sentinel_sarif.json')
   .option('--junit-out <file>', 'Write JUnit XML to file', '.sentinel_junit.xml')
   .option('--fail-on <severity>', 'Fail when severity at or above threshold', 'high')
@@ -342,7 +677,12 @@ program
   .option('--graphql <path>', 'Path to GraphQL schema file')
   .action(async (input, options) => {
     try {
-      const orchestratorPath = path.resolve(process.cwd(), 'SENTINEL-CLI', 'agents', 'multi_agent_orchestrator.js');
+      const orchestratorPath = path.resolve(
+        process.cwd(),
+        'SENTINEL-CLI',
+        'agents',
+        'multi_agent_orchestrator.js'
+      );
       const baseArgs = [];
       if (input) baseArgs.push(input);
       // Produce SARIF
@@ -355,10 +695,15 @@ program
       if (options.graphql) sarifArgs.push('--graphql', options.graphql);
       sarifArgs.push('--json');
       await showBannerOnce(program);
-      const sarifRes = await new Promise((resolve) => {
-        execFile('node', [orchestratorPath, ...sarifArgs], { cwd: process.cwd() }, (err, stdout, stderr) => {
-          resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
-        });
+      const sarifRes = await new Promise(resolve => {
+        execFile(
+          'node',
+          [orchestratorPath, ...sarifArgs],
+          { cwd: process.cwd() },
+          (err, stdout, stderr) => {
+            resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
+          }
+        );
       });
       if (sarifRes.stdout && options.sarifOut) {
         await fs.writeFile(path.resolve(process.cwd(), options.sarifOut), sarifRes.stdout, 'utf8');
@@ -368,10 +713,15 @@ program
       const junitArgs = [...baseArgs, '--format', 'junit'];
       if (options.failOn) junitArgs.push('--fail-on', options.failOn);
       if (options.metrics) junitArgs.push('--metrics');
-      const junitRes = await new Promise((resolve) => {
-        execFile('node', [orchestratorPath, ...junitArgs], { cwd: process.cwd() }, (err, stdout, stderr) => {
-          resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
-        });
+      const junitRes = await new Promise(resolve => {
+        execFile(
+          'node',
+          [orchestratorPath, ...junitArgs],
+          { cwd: process.cwd() },
+          (err, stdout, stderr) => {
+            resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
+          }
+        );
       });
       if (junitRes.stdout && options.junitOut) {
         await fs.writeFile(path.resolve(process.cwd(), options.junitOut), junitRes.stdout, 'utf8');
@@ -395,7 +745,12 @@ program
   .option('--graphql <path>', 'Path to GraphQL schema file')
   .action(async (prUrl, input, options) => {
     try {
-      const orchestratorPath = path.resolve(process.cwd(), 'SENTINEL-CLI', 'agents', 'multi_agent_orchestrator.js');
+      const orchestratorPath = path.resolve(
+        process.cwd(),
+        'SENTINEL-CLI',
+        'agents',
+        'multi_agent_orchestrator.js'
+      );
       const args = [];
       if (input) args.push(input);
       args.push('--format', 'markdown');
@@ -403,10 +758,15 @@ program
       if (options.openapi) args.push('--openapi', options.openapi);
       if (options.graphql) args.push('--graphql', options.graphql);
       await showBannerOnce(program);
-      const runRes = await new Promise((resolve) => {
-        execFile('node', [orchestratorPath, ...args], { cwd: process.cwd() }, (err, stdout, stderr) => {
-          resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
-        });
+      const runRes = await new Promise(resolve => {
+        execFile(
+          'node',
+          [orchestratorPath, ...args],
+          { cwd: process.cwd() },
+          (err, stdout, stderr) => {
+            resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
+          }
+        );
       });
       const markdown = runRes.stdout || '';
       if (!markdown.trim()) {
@@ -431,7 +791,11 @@ program
 program
   .command('agents [input]')
   .description('Run multi-agent analysis (Scanner → Fixer → Validator)')
-  .option('-f, --format <format>', 'Output format (console|json|markdown|html|sarif|junit)', 'console')
+  .option(
+    '-f, --format <format>',
+    'Output format (console|json|markdown|html|sarif|junit)',
+    'console'
+  )
   .option('--fail-on <severity>', 'Fail when severity at or above threshold')
   .option('--openapi <path>', 'Path to OpenAPI schema file')
   .option('--graphql <path>', 'Path to GraphQL schema file')
@@ -443,7 +807,12 @@ program
   .option('-o, --output <file>', 'Write output to file')
   .action(async (input, options) => {
     try {
-      const orchestratorPath = path.resolve(process.cwd(), 'SENTINEL-CLI', 'agents', 'multi_agent_orchestrator.js');
+      const orchestratorPath = path.resolve(
+        process.cwd(),
+        'SENTINEL-CLI',
+        'agents',
+        'multi_agent_orchestrator.js'
+      );
       const args = [];
       if (input) args.push(input);
       if (options.format && options.format !== 'console') {
@@ -471,10 +840,15 @@ program
       const needsJson = options.format === 'json' || options.format === 'sarif';
       if (needsJson) args.push('--json');
       await showBannerOnce(program);
-      const res = await new Promise((resolve) => {
-        execFile('node', [orchestratorPath, ...args], { cwd: process.cwd() }, (err, stdout, stderr) => {
-          resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
-        });
+      const res = await new Promise(resolve => {
+        execFile(
+          'node',
+          [orchestratorPath, ...args],
+          { cwd: process.cwd() },
+          (err, stdout, stderr) => {
+            resolve({ code: err && err.code ? err.code : 0, stdout, stderr });
+          }
+        );
       });
       const outText = res.stdout || '';
       if (options.output) {
@@ -526,7 +900,8 @@ program
   .option('--save-history', 'Save to trend history')
   .action(async options => {
     try {
-      process.env.SENTINEL_ANALYZERS = 'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,custom';
+      process.env.SENTINEL_ANALYZERS =
+        'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,custom';
       const bot = new CodeReviewBot();
       await bot.initialize();
 
@@ -568,7 +943,9 @@ program
         ).length;
 
         if (criticalCount > 0) {
-          console.log(chalk.red(`\n❌ Commit blocked: ${criticalCount} critical/high issues found`));
+          console.log(
+            chalk.red(`\n❌ Commit blocked: ${criticalCount} critical/high issues found`)
+          );
           process.exit(1);
         }
       }
@@ -650,7 +1027,11 @@ program
 program
   .command('diff')
   .description('Review staged changes only (pre-commit friendly)')
-  .option('-f, --format <format>', 'Output format (console|json|html|markdown|sarif|junit)', 'console')
+  .option(
+    '-f, --format <format>',
+    'Output format (console|json|html|markdown|sarif|junit)',
+    'console'
+  )
   .option('-o, --output <file>', 'Output file path')
   .option('--no-snippets', 'Disable code snippets in output')
   .action(async options => {
@@ -685,7 +1066,8 @@ program
   .option('--save-history', 'Save to trend history')
   .action(async options => {
     try {
-      process.env.SENTINEL_ANALYZERS = 'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,custom';
+      process.env.SENTINEL_ANALYZERS =
+        'security,quality,bugs,performance,dependency,accessibility,typescript,react,api,secrets,custom';
       const bot = new CodeReviewBot();
       await bot.initialize();
 
@@ -712,7 +1094,11 @@ program
   .description('CI-friendly analysis (JSON output, fail on severity)')
   .option('-f, --format <format>', 'Output format (console|json|sarif|junit)', 'json')
   .option('-o, --output <file>', 'Output file path')
-  .option('--fail-on <level>', 'Fail on severity level or above (critical|high|medium|low|info|none)', 'high')
+  .option(
+    '--fail-on <level>',
+    'Fail on severity level or above (critical|high|medium|low|info|none)',
+    'high'
+  )
   .option('--staged', 'Analyze staged changes only')
   .action(async options => {
     try {
@@ -862,6 +1248,99 @@ program
     console.log(chalk.gray('  sentinel analyze --all-analyzers'));
     console.log(chalk.gray('  sentinel analyze -a security,api,secrets'));
     console.log('');
+  });
+
+program
+  .command('explain <issue-id>')
+  .description('Get plain-English explanation of a vulnerability')
+  .option('-v, --verbose', 'Show original finding details')
+  .option('--no-color', 'Disable colored output')
+  .addHelpText(
+    'after',
+    `
+Examples:
+  sentinel explain security_1700000000_abc123def
+  sentinel explain abc123 -v
+
+This command provides:
+  • What the vulnerability is (plain English)
+  • How an attacker would exploit it
+  • A concrete fixed code example
+
+The issue ID comes from analysis output. Run 'sentinel analyze' first,
+then look for the issue ID in the output or JSON report.
+`
+  )
+  .action(async (issueId, options) => {
+    try {
+      const { explainVulnerability, formatExplanation } =
+        await import('./utils/vulnerabilityExplainer.js');
+
+      console.log(chalk.cyan('🔍 Looking up issue:'), issueId);
+
+      let issue = null;
+
+      const dbPath = path.resolve(process.cwd(), '.sentinel/database.json');
+      try {
+        const dbContent = await fs.readFile(dbPath, 'utf8');
+        const db = JSON.parse(dbContent);
+
+        if (db.issues && db.issues.length > 0) {
+          issue = db.issues.find(i => i.id === issueId);
+        }
+
+        if (!issue && db.analyses && db.analyses.length > 0) {
+          for (const analysis of db.analyses.reverse()) {
+            if (analysis.issues) {
+              issue = analysis.issues.find(i => i.id === issueId);
+              if (issue) break;
+            }
+          }
+        }
+      } catch (e) {}
+
+      if (!issue) {
+        const cachePath = path.resolve(process.cwd(), '.codereview-cache.json');
+        try {
+          const cacheContent = await fs.readFile(cachePath, 'utf8');
+          const cache = JSON.parse(cacheContent);
+
+          if (cache.issues) {
+            issue = cache.issues.find(i => i.id === issueId);
+          }
+          if (!issue && cache.results?.issues) {
+            issue = cache.results.issues.find(i => i.id === issueId);
+          }
+        } catch (e) {}
+      }
+
+      if (!issue) {
+        console.log(chalk.yellow(`\n⚠ Issue '${issueId}' not found in local database.`));
+        console.log(chalk.gray('\nTrying to explain based on issue ID pattern...\n'));
+
+        const inferredType = issueId.split('_')[0];
+        issue = {
+          id: issueId,
+          type: inferredType,
+          title: 'Security Issue (ID: ' + issueId + ')',
+          message: 'Issue was not found in local analysis results.',
+          severity: 'unknown',
+        };
+      }
+
+      const explanation = explainVulnerability(issue);
+      const output = formatExplanation(explanation, {
+        color: options.color !== false,
+        verbose: options.verbose,
+      });
+
+      console.log(output);
+    } catch (error) {
+      console.error(chalk.red('Explain failed:'), error.message);
+      console.log(
+        chalk.gray('Make sure to run "sentinel analyze" first to populate the issue database.')
+      );
+    }
   });
 
 program
@@ -1113,7 +1592,7 @@ program
       console.log(
         chalk.red(
           '⚠️  Sentinel Tip: Some providers still have API keys stored in .codereviewrc.json.\n' +
-          '    Consider running `sentinel models --env id=ENV_VAR --strip-secrets id` to rely on environment variables.'
+            '    Consider running `sentinel models --env id=ENV_VAR --strip-secrets id` to rely on environment variables.'
         )
       );
     }
@@ -1180,7 +1659,9 @@ program
       const result = await github.postReview(prUrl, issues);
 
       console.log(chalk.green('✓') + ` Posted review to ${prUrl}`);
-      console.log(chalk.gray(`  Issues: ${result.issuesPosted}, Inline comments: ${result.inlineComments}`));
+      console.log(
+        chalk.gray(`  Issues: ${result.issuesPosted}, Inline comments: ${result.inlineComments}`)
+      );
     } catch (error) {
       console.error(chalk.red('PR Review failed:'), error.message);
       process.exit(1);
@@ -1264,7 +1745,9 @@ program
         const pkgContent = await fs.readFile(path.resolve('package.json'), 'utf8');
         const pkg = JSON.parse(pkgContent);
         if (pkg.workspaces) {
-          workspaces = Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces.packages || [];
+          workspaces = Array.isArray(pkg.workspaces)
+            ? pkg.workspaces
+            : pkg.workspaces.packages || [];
         }
       } catch (e) {
         // No package.json or no workspaces
@@ -1396,7 +1879,9 @@ program
       await sarif.saveToFile(issues, options.output);
 
       console.log(chalk.green('✓') + ` SARIF report saved to ${options.output}`);
-      console.log(chalk.gray('  Upload to GitHub: gh code-scanning upload-sarif --sarif ' + options.output));
+      console.log(
+        chalk.gray('  Upload to GitHub: gh code-scanning upload-sarif --sarif ' + options.output)
+      );
     } catch (error) {
       console.error(chalk.red('SARIF generation failed:'), error.message);
       process.exit(1);
@@ -1430,16 +1915,28 @@ program
       console.log(chalk.gray('─'.repeat(50)));
 
       if (trends.trend === 'insufficient_data') {
-        console.log(chalk.yellow('Not enough data points. Run `sentinel trends --save` after each analysis.'));
+        console.log(
+          chalk.yellow('Not enough data points. Run `sentinel trends --save` after each analysis.')
+        );
       } else {
-        const trendEmoji = trends.trend === 'improving' ? '📉' : trends.trend === 'worsening' ? '📈' : '➡️';
-        const trendColor = trends.trend === 'improving' ? chalk.green : trends.trend === 'worsening' ? chalk.red : chalk.gray;
+        const trendEmoji =
+          trends.trend === 'improving' ? '📉' : trends.trend === 'worsening' ? '📈' : '➡️';
+        const trendColor =
+          trends.trend === 'improving'
+            ? chalk.green
+            : trends.trend === 'worsening'
+              ? chalk.red
+              : chalk.gray;
 
         console.log(`${trendEmoji} Trend: ${trendColor(trends.trend.toUpperCase())}`);
         console.log(`📊 Current Issues: ${chalk.bold(trends.current)}`);
         console.log(`📅 Data Points: ${trends.dataPoints}`);
-        console.log(`🔄 Short-term Change: ${trends.shortTermChange >= 0 ? '+' : ''}${trends.shortTermChange}`);
-        console.log(`🔄 Long-term Change: ${trends.longTermChange >= 0 ? '+' : ''}${trends.longTermChange}`);
+        console.log(
+          `🔄 Short-term Change: ${trends.shortTermChange >= 0 ? '+' : ''}${trends.shortTermChange}`
+        );
+        console.log(
+          `🔄 Long-term Change: ${trends.longTermChange >= 0 ? '+' : ''}${trends.longTermChange}`
+        );
         console.log('');
         console.log(chalk.gray('Recent History:'));
 
@@ -1491,14 +1988,16 @@ program
         console.log(chalk.gray('─'.repeat(50)));
 
         for (const author of authorReport) {
-          const critical = author.counts.critical > 0 ? chalk.red(`${author.counts.critical}C `) : '';
+          const critical =
+            author.counts.critical > 0 ? chalk.red(`${author.counts.critical}C `) : '';
           const high = author.counts.high > 0 ? chalk.yellow(`${author.counts.high}H `) : '';
           console.log(`\n${chalk.bold(author.author)} (${author.email})`);
           console.log(`  Issues: ${critical}${high}${author.issues.length} total`);
 
           // Show top 3 issues
           for (const issue of author.issues.slice(0, 3)) {
-            const emoji = issue.severity === 'critical' ? '🛑' : issue.severity === 'high' ? '🔶' : '🔷';
+            const emoji =
+              issue.severity === 'critical' ? '🛑' : issue.severity === 'high' ? '🔶' : '🔷';
             console.log(`  ${emoji} ${issue.title} (${issue.file}:${issue.line})`);
           }
           if (author.issues.length > 3) {
@@ -1513,7 +2012,264 @@ program
     }
   });
 
-// NEW: Dashboard Command
+// ========================================
+// CACHE COMMAND - Manage analysis cache
+// ========================================
+program
+  .command('cache')
+  .description('Manage analysis cache for improved performance')
+  .option('--clear', 'Clear all cache')
+  .option('--stats', 'Show cache statistics')
+  .option('--invalidate <pattern>', 'Invalidate cache by pattern (regex)')
+  .option('--size', 'Show cache size')
+  .action(async options => {
+    try {
+      const { cache } = await import('./utils/cache.js');
+
+      if (options.clear) {
+        console.log(chalk.blue('🗑️  Clearing cache...'));
+        await cache.clear();
+        console.log(chalk.green('✓ Cache cleared successfully'));
+        return;
+      }
+
+      if (options.invalidate) {
+        console.log(chalk.blue(`🗑️  Invalidating cache matching: ${options.invalidate}`));
+        await cache.invalidate(options.invalidate);
+        console.log(chalk.green('✓ Cache invalidated'));
+        return;
+      }
+
+      if (options.stats || options.size || !Object.keys(options).length) {
+        const stats = cache.getStats();
+        console.log(chalk.bold.blue('\n📊 Cache Statistics\n'));
+        console.log(chalk.cyan('  Memory Size:'), `${stats.memorySize}/${stats.maxSize} entries`);
+        console.log(chalk.cyan('  Hit Rate:'), `${(stats.hitRate * 100).toFixed(2)}%`);
+        console.log(
+          chalk.cyan('  TTL:'),
+          `${stats.ttl}ms (${(stats.ttl / 1000 / 60).toFixed(1)} minutes)`
+        );
+        console.log(chalk.cyan('  Enabled:'), stats.enabled ? '✓' : '✗');
+        console.log();
+      }
+    } catch (error) {
+      console.error(chalk.red('Cache error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// BADGE COMMAND - Generate repository badges
+// ========================================
+program
+  .command('badge')
+  .description('Generate security score badges for your repository')
+  .option('--type <type>', 'Badge type: score|status|issues|security', 'score')
+  .option('--owner <owner>', 'Repository owner')
+  .option('--repo <repo>', 'Repository name')
+  .option('--markdown', 'Output markdown code')
+  .option('--html', 'Output HTML code')
+  .option('--server', 'Start badge API server')
+  .option('--port <port>', 'Badge server port', '3001')
+  .action(async options => {
+    try {
+      if (options.server) {
+        console.log(chalk.blue('🎖️  Starting Badge API Server...'));
+        const { startBadgeServer } = await import('./server/badgeServer.js');
+        process.env.BADGE_API_PORT = options.port;
+        startBadgeServer();
+        return;
+      }
+
+      const { BadgeGenerator } = await import('./utils/badgeGenerator.js');
+      const generator = new BadgeGenerator();
+
+      if (!options.owner || !options.repo) {
+        console.error(chalk.red('Error: --owner and --repo are required'));
+        console.log(
+          chalk.gray('Example: sentinel badge --owner KunjShah95 --repo SENTINEL-CLI --markdown')
+        );
+        process.exit(1);
+      }
+
+      console.log(chalk.bold.blue('\n🎖️  Repository Badges\n'));
+
+      if (options.markdown) {
+        const badges = generator.generateReadmeBadges(options.owner, options.repo);
+        console.log(chalk.cyan('Score Badge:'));
+        console.log(chalk.white(badges.score));
+        console.log();
+        console.log(chalk.cyan('Status Badge:'));
+        console.log(chalk.white(badges.status));
+        console.log();
+        console.log(chalk.cyan('Issues Badge:'));
+        console.log(chalk.white(badges.issues));
+        console.log();
+        console.log(chalk.cyan('Security Badge:'));
+        console.log(chalk.white(badges.security));
+        console.log();
+      } else if (options.html) {
+        console.log(chalk.cyan('Score Badge (HTML):'));
+        console.log(chalk.white(generator.generateHtmlBadge(options.owner, options.repo, 'score')));
+        console.log();
+      } else {
+        const badgeUrl = `https://sentinel-cli.app/badge/${options.owner}/${options.repo}/${options.type}.svg`;
+        console.log(chalk.cyan('Badge URL:'));
+        console.log(chalk.white(badgeUrl));
+        console.log();
+        console.log(chalk.gray('Add --markdown or --html for ready-to-use code'));
+      }
+    } catch (error) {
+      console.error(chalk.red('Badge error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// WEBHOOK COMMAND - GitHub App webhook server
+// ========================================
+program
+  .command('webhook')
+  .description('Start GitHub App webhook server for automated PR reviews')
+  .option('--port <port>', 'Webhook server port', '3000')
+  .option('--secret <secret>', 'Webhook secret (or set GITHUB_WEBHOOK_SECRET)')
+  .option('--app-id <id>', 'GitHub App ID (or set GITHUB_APP_ID)')
+  .action(async options => {
+    try {
+      console.log(chalk.blue('🤖 Starting GitHub App Webhook Server...'));
+
+      // Set environment variables if provided
+      if (options.secret) process.env.GITHUB_WEBHOOK_SECRET = options.secret;
+      if (options.appId) process.env.GITHUB_APP_ID = options.appId;
+
+      const express = (await import('express')).default;
+      const { GitHubAppWebhookHandler } = await import('./integrations/githubAppWebhook.js');
+
+      const app = express();
+      const webhookHandler = new GitHubAppWebhookHandler();
+
+      app.use(express.json());
+
+      app.post('/api/github/webhook', async (req, res) => {
+        try {
+          const signature = req.headers['x-hub-signature-256'];
+          const result = await webhookHandler.handleWebhook(
+            req.headers,
+            signature,
+            JSON.stringify(req.body)
+          );
+          res.json(result);
+        } catch (error) {
+          console.error(chalk.red('Webhook error:'), error.message);
+          res.status(500).json({ error: error.message });
+        }
+      });
+
+      app.get('/health', (req, res) => {
+        res.json({ status: 'ok', service: 'sentinel-webhook' });
+      });
+
+      const port = parseInt(options.port);
+      app.listen(port, () => {
+        console.log(chalk.green(`✓ Webhook server running on port ${port}`));
+        console.log(chalk.cyan(`📡 Webhook URL: http://localhost:${port}/api/github/webhook`));
+        console.log(chalk.cyan(`🏥 Health check: http://localhost:${port}/health`));
+        console.log(chalk.gray('\nPress Ctrl+C to stop'));
+      });
+    } catch (error) {
+      console.error(chalk.red('Webhook server error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// VALIDATE COMMAND - Validate configuration
+// ========================================
+program
+  .command('validate')
+  .description('Validate Sentinel configuration file')
+  .option('-c, --config <path>', 'Config file path', '.sentinelrc.json')
+  .action(async options => {
+    try {
+      console.log(chalk.blue('🔍 Validating configuration...'));
+
+      const configPath = path.resolve(process.cwd(), options.config);
+      const { createValidatedConfig } = await import('./config/configValidator.js');
+
+      const configData = JSON.parse(await fs.readFile(configPath, 'utf8'));
+      const validConfig = createValidatedConfig(configData);
+
+      console.log(chalk.green('✓ Configuration is valid'));
+      console.log(chalk.cyan('\nValidated Settings:'));
+      console.log(chalk.gray(`  AI Provider: ${validConfig.ai?.provider || 'default'}`));
+      console.log(
+        chalk.gray(
+          `  Enabled Analyzers: ${Object.keys(validConfig.analyzers || {}).filter(k => validConfig.analyzers[k]).length}`
+        )
+      );
+      console.log();
+    } catch (error) {
+      console.error(chalk.red('✗ Configuration validation failed:'));
+      console.error(chalk.yellow(error.message));
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// STATUS COMMAND - Show system status
+// ========================================
+program
+  .command('status')
+  .description('Show Sentinel system status and statistics')
+  .option('--cache', 'Show cache statistics')
+  .option('--rate-limiter', 'Show rate limiter status')
+  .action(async options => {
+    try {
+      const { showStatus } = await import('./commands/statusCommand.js');
+      await showStatus(options);
+    } catch (error) {
+      console.error(chalk.red('Status failed:'), error.message);
+    }
+  });
+
+// ========================================
+// BENCHMARK COMMAND - Performance testing
+// ========================================
+program
+  .command('benchmark')
+  .description('Run performance benchmarks')
+  .option('--quick', 'Run quick functionality test')
+  .action(async options => {
+    try {
+      if (options.quick) {
+        const { runQuickTest } = await import('./commands/benchmarkCommand.js');
+        await runQuickTest();
+      } else {
+        const { runBenchmark } = await import('./commands/benchmarkCommand.js');
+        await runBenchmark();
+      }
+    } catch (error) {
+      console.error(chalk.red('Benchmark failed:'), error.message);
+    }
+  });
+
+// NEW: Badge Server Command
+program
+  .command('badge-server')
+  .description('Start the badge server')
+  .option('-p, --port <number>', 'Port to run the server on', '3000')
+  .action(async options => {
+    try {
+      const port = parseInt(options.port, 10);
+      const { startBadgeServer } = await import('./commands/serverCommand.js');
+      await startBadgeServer(port);
+    } catch (error) {
+      console.error(chalk.red('Failed to start badge server:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Show help if no command was provided
 program
   .command('dashboard')
   .description('Launch the Sentinel web dashboard')
@@ -1556,7 +2312,7 @@ program
 
         if (req.url === '/api/config' && req.method === 'POST') {
           let body = '';
-          req.on('data', chunk => body += chunk);
+          req.on('data', chunk => (body += chunk));
           req.on('end', async () => {
             try {
               const { configManager } = await import('./config/configManager.js');
@@ -1587,114 +2343,549 @@ program
     }
   });
 
-// NEW: Explain vulnerability command
+// ========================================
+// PR DESCRIPTION COMMAND
+// ========================================
 program
-  .command('explain <issue-id>')
-  .description('Get detailed explanation of a vulnerability')
-  .option('-f, --format <format>', 'Output format (console|json)', 'console')
-  .action(async (issueId, options) => {
+  .command('pr-description')
+  .description('Generate AI-powered PR descriptions')
+  .option('--title <text>', 'PR title')
+  .option('--files <paths>', 'Comma-separated list of files')
+  .option('--base-branch <name>', 'Base branch', 'main')
+  .action(async options => {
     try {
-      const { getVulnerabilityExplanation, searchVulnerabilities, getAllVulnerabilities } = 
-        await import('./utils/vulnKnowledgeBase.js');
-      
-      let vuln = getVulnerabilityExplanation(issueId);
-      
-      if (!vuln) {
-        const matches = searchVulnerabilities(issueId);
-        if (matches.length > 0) {
-          vuln = matches[0];
-          console.log(chalk.yellow(`\nClosest match: ${vuln.name}\n`));
-        }
-      }
-      
-      if (!vuln) {
-        console.log(chalk.red(`\nNo vulnerability found for: ${issueId}`));
-        console.log(chalk.gray('\nAvailable vulnerabilities:'));
-        const all = getAllVulnerabilities();
-        for (const v of all) {
-          console.log(`  ${chalk.cyan(v.id.padEnd(30))} ${chalk.gray(v.name)}`);
-        }
-        return;
-      }
-      
-      if (options.format === 'json') {
-        console.log(JSON.stringify(vuln, null, 2));
-        return;
-      }
-      
-      const severityColor = {
-        critical: chalk.red,
-        high: chalk.red,
-        medium: chalk.yellow,
-        low: chalk.blue,
-        info: chalk.gray
-      };
-      
-      console.log('');
-      console.log(chalk.bold.cyan('═══════════════════════════════════════════════════════════════'));
-      console.log(chalk.bold.cyan('  🔐 VULNERABILITY EXPLANATION'));
-      console.log(chalk.bold.cyan('═══════════════════════════════════════════════════════════════'));
-      console.log('');
-      
-      console.log(chalk.bold.white('  📛 Name: ') + vuln.name);
-      console.log(chalk.bold.white('  ⚡ Severity: ') + severityColor[vuln.severity](vuln.severity.toUpperCase()));
-      console.log(chalk.bold.white('  📂 Category: ') + vuln.category);
-      console.log('');
-      
-      console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-      console.log(chalk.bold.white('  🤔 WHAT IS THIS?'));
-      console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-      console.log('');
-      console.log('  ' + vuln.what.split('\n').join('\n  '));
-      console.log('');
-      
-      console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-      console.log(chalk.bold.white('  💀 HOW WOULD AN ATTACKER EXPLOIT IT?'));
-      console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-      console.log('');
-      console.log('  ' + vuln.exploit.split('\n').join('\n  '));
-      console.log('');
-      
-      console.log(chalk.bold.green('═══════════════════════════════════════════════════════════════'));
-      console.log(chalk.bold.green('  ✅ FIXED CODE EXAMPLE'));
-      console.log(chalk.bold.green('═══════════════════════════════════════════════════════════════'));
-      console.log('');
-      
-      console.log(chalk.red('  ❌ VULNERABLE CODE:'));
-      console.log(chalk.gray('  ─────────────────────'));
-      console.log('');
-      const vulnLines = vuln.vulnerableExample.split('\n');
-      for (const line of vulnLines) {
-        console.log('  ' + chalk.red(line));
-      }
-      console.log('');
-      
-      console.log(chalk.green('  ✅ SAFE CODE:'));
-      console.log(chalk.gray('  ─────────────────────'));
-      console.log('');
-      const fixedLines = vuln.fixedExample.split('\n');
-      for (const line of fixedLines) {
-        console.log('  ' + chalk.green(line));
-      }
-      console.log('');
-      
-      if (vuln.cwe) {
-        console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-        console.log(chalk.bold.white('  📚 REFERENCES'));
-        console.log(chalk.bold.white('═══════════════════════════════════════════════════════════════'));
-        console.log('');
-        console.log('  ' + vuln.cwe);
-        for (const ref of vuln.references || []) {
-          console.log('  ' + chalk.blue.underline(ref));
-        }
-        console.log('');
-      }
-      
-      console.log(chalk.bold.cyan('═══════════════════════════════════════════════════════════════'));
-      console.log('');
-      
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('pr-description', {
+        title: options.title,
+        files: options.files?.split(',').map(f => f.trim()),
+        baseBranch: options.baseBranch,
+      });
     } catch (error) {
-      console.error(chalk.red('Explain failed:'), error.message);
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// COMMIT MESSAGE COMMAND
+// ========================================
+program
+  .command('commit-msg')
+  .description('Get AI-powered commit message suggestions')
+  .option('--staged', 'Use staged changes only')
+  .action(async options => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('commit-msg', { staged: options.staged });
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// INLINE COMMENTS COMMAND
+// ========================================
+program
+  .command('inline-comments')
+  .description('Generate inline review comments for PR')
+  .option('--format <type>', 'Output format: console|json', 'console')
+  .action(async options => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      const result = await manager.execute('inline-comments', { format: options.format });
+
+      if (options.format === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      }
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// TEST SUGGESTIONS COMMAND
+// ========================================
+program
+  .command('test-suggestions [files...]')
+  .description('Generate test suggestions for files')
+  .action(async (files, _options) => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('test-suggestions', { files });
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// COMPLEXITY COMMAND
+// ========================================
+program
+  .command('complexity [files...]')
+  .description('Analyze code complexity')
+  .action(async (files, _options) => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('complexity', { files });
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// BEST PRACTICES COMMAND
+// ========================================
+program
+  .command('best-practices [files...]')
+  .description('Analyze code against best practices')
+  .action(async (files, _options) => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('best-practices', { files });
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// MULTI-FILE COMMAND
+// ========================================
+program
+  .command('multi-file [files...]')
+  .description('Analyze cross-file dependencies and architecture')
+  .action(async (files, _options) => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('multi-file', { files });
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// PR SUMMARY COMMAND
+// ========================================
+program
+  .command('pr-summary')
+  .description('Generate comprehensive PR summary')
+  .option('--title <text>', 'PR title')
+  .option('--format <type>', 'Output format: console|markdown', 'console')
+  .action(async options => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      const result = await manager.execute('pr-summary', {
+        title: options.title,
+        format: options.format,
+      });
+
+      if (options.format === 'markdown') {
+        const { PRSummaryGenerator } = await import('./features/pr/prSummaryGenerator.js');
+        const generator = new PRSummaryGenerator();
+        console.log(generator.formatAsMarkdown(result));
+      }
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// CUSTOM RULES COMMAND
+// ========================================
+program
+  .command('rules')
+  .description('Manage custom linting rules')
+  .option('--list', 'List all rules')
+  .option('--create', 'Create new rule')
+  .option('--export', 'Export custom rules')
+  .action(async options => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('custom-rules', options);
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// ========================================
+// TEAM COMMAND
+// ========================================
+program
+  .command('team')
+  .description('Manage team workspace')
+  .option('--status', 'Show workspace status')
+  .option('--add', 'Add team member')
+  .option('--analytics', 'Show analytics')
+  .action(async options => {
+    try {
+      const { FeaturesManager } = await import('./features/featuresManager.js');
+      const manager = new FeaturesManager();
+      await manager.execute('team', options);
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// Parallel Analysis Commands
+program
+  .command('parallel [target]')
+  .description('Run parallel analysis with worker threads')
+  .option('-w, --workers <number>', 'Number of worker threads', '4')
+  .option('-e, --extensions <list>', 'File extensions to analyze', '.js,.ts,.jsx,.tsx')
+  .option('--no-reduce', 'Disable false positive reduction')
+  .option('-t, --timeout <ms>', 'Analysis timeout in milliseconds', '60000')
+  .option('-v, --verbose', 'Show detailed issue information')
+  .action(async (target, options) => {
+    try {
+      const { runParallelAnalysis } = await import('./commands/parallelCommands.js');
+      const targetPath = target || process.cwd();
+      const opts = {
+        workers: parseInt(options.workers, 10),
+        extensions: options.extensions.split(','),
+        reduceFalsePositives: options.reduce,
+        timeout: parseInt(options.timeout, 10),
+        verbose: options.verbose,
+      };
+      await runParallelAnalysis(targetPath, opts);
+    } catch (error) {
+      console.error(chalk.red('Parallel analysis failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('parallel-status')
+  .description('Show parallel processing status and metrics')
+  .action(async () => {
+    try {
+      const { showParallelStatus } = await import('./commands/parallelCommands.js');
+      await showParallelStatus();
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// Feature Flag Commands
+program
+  .command('features')
+  .description('Manage feature flags')
+  .option('-l, --list', 'List all feature flags')
+  .option('-e, --enable <name>', 'Enable a feature flag')
+  .option('-d, --disable <name>', 'Disable a feature flag')
+  .option('-r, --rollout <name> <percentage>', 'Set feature rollout percentage')
+  .action(async options => {
+    try {
+      const cmds = await import('./commands/featureFlagCommands.js');
+      if (options.list) {
+        await cmds.listFeatureFlags();
+      } else if (options.enable) {
+        await cmds.enableFeatureFlag(options.enable);
+      } else if (options.disable) {
+        await cmds.disableFeatureFlag(options.disable);
+      } else if (options.rollout) {
+        const parts = options.rollout.split(' ');
+        await cmds.setFeatureRollout(parts[0], parts[1]);
+      } else {
+        await cmds.listFeatureFlags();
+      }
+    } catch (error) {
+      console.error(chalk.red('Feature flag command failed:'), error.message);
+    }
+  });
+
+// Secrets Scanning Commands
+program
+  .command('scan-secrets [target]')
+  .description('Scan for secrets and sensitive data')
+  .option('-e, --extensions <list>', 'File extensions to scan', '.js,.ts,.json,.yml,.env')
+  .option('--entropy <threshold>', 'Entropy threshold (default: 4.5)', '4.5')
+  .option('--fail-on-secrets', 'Exit with error if secrets found')
+  .option('-v, --verbose', 'Show detailed findings with context')
+  .action(async (target, options) => {
+    try {
+      const { scanSecrets } = await import('./commands/secretCommands.js');
+      const targetPath = target || process.cwd();
+      const opts = {
+        extensions: options.extensions.split(','),
+        entropyThreshold: parseFloat(options.entropy),
+        failOnSecrets: options.failOnSecrets,
+        verbose: options.verbose,
+      };
+      await scanSecrets(targetPath, opts);
+    } catch (error) {
+      console.error(chalk.red('Secrets scan failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('secret-patterns')
+  .description('List all secret detection patterns')
+  .action(async () => {
+    try {
+      const { listSecretPatterns } = await import('./commands/secretCommands.js');
+      await listSecretPatterns();
+    } catch (error) {
+      console.error(chalk.red('Failed:'), error.message);
+    }
+  });
+
+// API Server Commands
+program
+  .command('server')
+  .description('Start the Sentinel API server')
+  .option('-p, --port <number>', 'Server port', '3000')
+  .option('-H, --host <host>', 'Server host', '0.0.0.0')
+  .option('--no-auth', 'Disable authentication')
+  .option('-t, --token <token>', 'API auth token')
+  .action(async options => {
+    try {
+      const { default: SentinelAPIServer } = await import('./api/apiServer.js');
+
+      if (options.token) {
+        process.env.SENTINEL_API_TOKEN = options.token;
+      }
+
+      const server = new SentinelAPIServer({
+        port: parseInt(options.port, 10),
+        host: options.host,
+        enableAuth: options.auth,
+      });
+
+      await server.initialize();
+      await server.start();
+
+      // Keep process alive
+      process.on('SIGINT', async () => {
+        console.log('\nShutting down server...');
+        await server.stop();
+        process.exit(0);
+      });
+    } catch (error) {
+      console.error(chalk.red('Failed to start server:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Auto-fix Commands
+program
+  .command('fix [target]')
+  .description('Automatically fix detected issues')
+  .option('-a, --analyzer <name>', 'Specific analyzer to run')
+  .option('--dry-run', 'Show fixes without applying')
+  .option('-c, --confidence <level>', 'Minimum confidence threshold', '0.8')
+  .option('--ai-provider <provider>', 'AI provider (openai/anthropic/groq)', 'local')
+  .option('-v, --verbose', 'Show detailed fix information')
+  .action(async (target, options) => {
+    try {
+      const { default: AutoFixGenerator } = await import('./ai/autoFixGenerator.js');
+      const ora = await import('ora').then(m => m.default);
+
+      const spinner = ora('Analyzing code for fixable issues...').start();
+
+      const fixer = new AutoFixGenerator({
+        llmProvider: options.aiProvider,
+        confidenceThreshold: parseFloat(options.confidence),
+      });
+
+      // TODO: Actually run analysis and get issues
+      const mockIssues = [
+        {
+          type: 'hardcoded-password',
+          severity: 'high',
+          message: 'Hardcoded password detected',
+          file: 'config.js',
+          line: 5,
+          snippet: 'const password = "secret123";',
+        },
+      ];
+
+      spinner.text = 'Generating fixes...';
+
+      const fixes = await fixer.generateFixesForIssues(mockIssues, {
+        dryRun: options.dryRun,
+      });
+
+      spinner.succeed(`Generated ${fixes.length} fixes`);
+
+      for (const { issue, fix } of fixes) {
+        console.log(chalk.bold(`\n${issue.file}:${issue.line}`));
+        console.log(chalk.yellow(`  Issue: ${issue.message}`));
+        console.log(chalk.green(`  Fix: ${fix.description}`));
+        console.log(chalk.gray(`  Confidence: ${(fix.confidence * 100).toFixed(0)}%`));
+
+        if (options.verbose && fix.changes) {
+          for (const change of fix.changes) {
+            console.log(chalk.gray(`\n  - ${change.find}`));
+            console.log(chalk.green(`  + ${change.replace}`));
+          }
+        }
+
+        if (!options.dryRun) {
+          await fixer.applyFix(fix);
+          console.log(chalk.green('  ✓ Applied'));
+        }
+      }
+    } catch (error) {
+      console.error(chalk.red('Auto-fix failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Report Generation Commands
+program
+  .command('report [target]')
+  .description('Generate analysis reports')
+  .option('-f, --format <format>', 'Output format (html/pdf/markdown/json/sarif/junit/csv)', 'html')
+  .option('-o, --output <path>', 'Output file path')
+  .option('--title <title>', 'Report title', 'Security Analysis Report')
+  .action(async (target, options) => {
+    try {
+      const { default: ReportGenerator } = await import('./reports/reportGenerator.js');
+      const ora = await import('ora').then(m => m.default);
+
+      const spinner = ora('Generating report...').start();
+
+      const generator = new ReportGenerator({
+        outputDir: '.sentinel/reports',
+      });
+
+      // TODO: Actually run analysis
+      const mockIssues = [
+        {
+          type: 'security',
+          severity: 'high',
+          message: 'SQL injection vulnerability',
+          file: 'src/auth.js',
+          line: 25,
+          column: 10,
+          suggestion: 'Use parameterized queries',
+          tags: ['security', 'sql'],
+        },
+      ];
+
+      const outputPath = await generator.generate(mockIssues, {
+        format: options.format,
+        title: options.title,
+      });
+
+      spinner.succeed(`Report generated: ${outputPath}`);
+    } catch (error) {
+      console.error(chalk.red('Report generation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Policy Commands
+program
+  .command('policy')
+  .description('Manage security policies')
+  .option('-l, --list', 'List all policies')
+  .option('-c, --create <name>', 'Create a new policy')
+  .option('-t, --type <type>', 'Policy type (security/quality/compliance)', 'security')
+  .option('-e, --evaluate <path>', 'Evaluate policy against analysis results')
+  .action(async options => {
+    try {
+      const { default: PolicyEngine } = await import('./policy/policyEngine.js');
+
+      const engine = new PolicyEngine();
+
+      if (options.list) {
+        await engine.loadPolicies();
+        const policies = engine.getAllPolicies();
+
+        console.log(chalk.bold('\nSecurity Policies\n'));
+        for (const policy of policies) {
+          console.log(`${policy.name} (${policy.id})`);
+          console.log(`  Rules: ${policy.ruleCount}`);
+          console.log(`  Severity: ${policy.severity}\n`);
+        }
+      } else if (options.create) {
+        const template = engine.createPolicyTemplate(options.create, options.type);
+        const yaml = engine.exportPolicy(template.id, 'yaml');
+        console.log(yaml);
+      } else if (options.evaluate) {
+        await engine.loadPolicies();
+        // TODO: Load analysis results and evaluate
+        console.log(chalk.yellow('Policy evaluation not yet implemented'));
+      } else {
+        console.log(chalk.yellow('Use --list, --create, or --evaluate'));
+      }
+    } catch (error) {
+      console.error(chalk.red('Policy command failed:'), error.message);
+    }
+  });
+
+// Metrics Commands
+program
+  .command('metrics')
+  .description('Export metrics in Prometheus format')
+  .option('-o, --output <path>', 'Output file path')
+  .option('-f, --format <format>', 'Output format (prometheus/json)', 'prometheus')
+  .action(async options => {
+    try {
+      const { default: PrometheusExporter } = await import('./metrics/prometheusExporter.js');
+
+      const exporter = new PrometheusExporter();
+
+      if (options.format === 'prometheus') {
+        const metrics = exporter.export();
+
+        if (options.output) {
+          await exporter.exportToFile(options.output);
+          console.log(chalk.green(`✓ Metrics exported to ${options.output}`));
+        } else {
+          console.log(metrics);
+        }
+      } else {
+        const { globalMetrics } = await import('./metrics/metricsCollector.js');
+        console.log(JSON.stringify(globalMetrics.getAllMetrics(), null, 2));
+      }
+    } catch (error) {
+      console.error(chalk.red('Metrics export failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// ========================================
+// TUI COMMAND - Launch enhanced TUI
+// ========================================
+program
+  .command('tui')
+  .description('Launch the Sentinel interactive TUI')
+  .option('-m, --mode <mode>', 'TUI mode: dashboard|issues|fixes|policy|monitor', 'dashboard')
+  .option('--no-interact', 'Run TUI without interactive mode')
+  .action(async options => {
+    try {
+      const { default: EnhancedTUI } = await import('./utils/enhancedTui.js');
+
+      console.log(chalk.cyan('🎨 Launching Sentinel TUI...'));
+
+      const bot = new CodeReviewBot();
+      await bot.initialize();
+
+      const { issues } = await bot.runAnalysis({ format: 'json', silent: true });
+
+      const tui = new EnhancedTUI({
+        issues,
+        currentView: options.mode,
+        interactive: options.interact,
+      });
+
+      if (options.interact) {
+        await tui.start();
+      } else {
+        tui.render();
+      }
+    } catch (error) {
+      console.error(chalk.red('TUI failed:'), error.message);
       process.exit(1);
     }
   });

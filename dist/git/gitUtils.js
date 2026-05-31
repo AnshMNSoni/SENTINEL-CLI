@@ -74,6 +74,62 @@ export class GitUtils {
   }
 
   /**
+   * Get unstaged changes (modified but not staged)
+   */
+  async getUnstagedChanges() {
+    try {
+      const diffOutput = await this.git.diff();
+      const files = await this.git.diff(['--name-only']);
+
+      return {
+        diff: diffOutput,
+        files: files.split('\n').filter(Boolean),
+      };
+    } catch (error) {
+      throw new Error(`Failed to get unstaged changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all changes (staged + unstaged)
+   */
+  async getAllChanges() {
+    try {
+      const staged = await this.getStagedChanges();
+      const unstaged = await this.getUnstagedChanges();
+      
+      const allFiles = [...new Set([...staged.files, ...unstaged.files])];
+
+      return {
+        staged: staged,
+        unstaged: unstaged,
+        allFiles,
+        hasChanges: allFiles.length > 0,
+      };
+    } catch (error) {
+      throw new Error(`Failed to get all changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get diff of specific files (for targeted analysis)
+   */
+  async getFileDiff(filePath) {
+    try {
+      const staged = await this.git.diff(['--cached', '--', filePath]);
+      const unstaged = await this.git.diff(['--', filePath]);
+
+      return {
+        staged: staged || null,
+        unstaged: unstaged || null,
+        hasChanges: !!(staged || unstaged),
+      };
+    } catch (error) {
+      throw new Error(`Failed to get diff for ${filePath}: ${error.message}`);
+    }
+  }
+
+  /**
    * Get all changed files in working directory
    */
   async getWorkingDirectoryChanges() {
@@ -118,9 +174,11 @@ export class GitUtils {
           files.push(currentFile);
         }
 
-        const filePath = line.match(/diff --git a\/(.+) b\/\1/)?.[1] || 'unknown';
+        const filePath = line.match(/diff --git a\/(.+) b\/(.+)/);
+        const path = filePath ? filePath[2] : 'unknown';
+
         currentFile = {
-          path: filePath,
+          path: path,
           hunks: [],
           added: 0,
           deleted: 0,
@@ -252,6 +310,24 @@ export class GitUtils {
       };
     } catch (error) {
       throw new Error(`Failed to get branch diff: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get PR diff (changes between base branch and HEAD)
+   * Uses triple-dot syntax to find the common ancestor
+   */
+  async getPRDiff(baseBranch) {
+    try {
+      const diffOutput = await this.git.diff([`${baseBranch}...HEAD`]);
+      const files = await this.git.diff([`${baseBranch}...HEAD`, '--name-only']);
+
+      return {
+        diff: diffOutput,
+        files: files.split('\n').filter(Boolean),
+      };
+    } catch (error) {
+      throw new Error(`Failed to get PR diff against ${baseBranch}: ${error.message}`);
     }
   }
 
