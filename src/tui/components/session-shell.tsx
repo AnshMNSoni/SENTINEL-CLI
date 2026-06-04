@@ -9,6 +9,7 @@ type Props = {
   children: ReactNode;
   onSubmit: (value: string) => void;
   onCommand?: (command: string) => void;
+  onSlashCommand?: () => void;
   inputDisabled?: boolean;
   loading?: boolean;
   mode?: Mode;
@@ -22,6 +23,7 @@ export function SessionShell({
   children,
   onSubmit,
   onCommand,
+  onSlashCommand,
   inputDisabled = false,
   loading = false,
   mode = "BUILD",
@@ -50,6 +52,7 @@ export function SessionShell({
         <InputBar
           onSubmit={onSubmit}
           onCommand={onCommand}
+          onSlashCommand={onSlashCommand}
           disabled={inputDisabled}
           mode={mode}
           onModeToggle={onModeToggle}

@@ -2890,6 +2890,59 @@ program
     }
   });
 
+// New AI agent account/status commands
+program
+  .command('login')
+  .description('Issue a dev login token (or contact Sentinel server)')
+  .action(async () => {
+    try {
+      const { default: runLogin } = await import('./cli/commands/login.js');
+      await runLogin();
+    } catch (err) {
+      console.error(chalk.red('Login failed:'), err.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('whoami')
+  .description('Show current Sentinel status (user, mode, model, credits)')
+  .action(async () => {
+    try {
+      const { default: runStatus } = await import('./cli/commands/status.js');
+      await runStatus();
+    } catch (err) {
+      console.error(chalk.red('Status failed:'), err.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('clear')
+  .description('Clear local session cache')
+  .action(async () => {
+    try {
+      const { default: runClear } = await import('./cli/commands/clear.js');
+      runClear();
+    } catch (err) {
+      console.error(chalk.red('Clear failed:'), err.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('upgrade')
+  .description('Open Polar checkout for credits (or show dev-mode notice)')
+  .action(async () => {
+    try {
+      const { default: runUpgrade } = await import('./cli/commands/upgrade.js');
+      await runUpgrade();
+    } catch (err) {
+      console.error(chalk.red('Upgrade failed:'), err.message);
+      process.exit(1);
+    }
+  });
+
 // Show help if no command was provided
 if (!process.argv.slice(2).length) {
   await showBannerOnce(program);

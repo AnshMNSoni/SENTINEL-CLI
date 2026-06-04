@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { useKeyboard } from '@opentui/react';
 import { SessionShell } from '../components/session-shell';
+import { SessionPanel } from '../components/session-panel';
 import { UserMessage, BotMessage, ErrorMessage } from '../components/messages';
 import { CommandMenu } from '../components/command-menu';
 import { MultiStepAnalyzeDialog } from '../components/dialogs/multi-step-analyze';
 import { useTheme } from '../providers/theme';
 import { useDialog } from '../providers/dialog';
-import { useChat } from '../hooks/use-chat';
+import { useToast } from '../providers/toast';
+import { useAgentChat } from '../hooks/use-agent-chat';
+import { Sessions } from '../lib/api-client';
 import { getDisplayVersion } from '../lib/version';
 import { TOOLS } from '../lib/tools';
 import type { CommandContext } from '../components/command-menu/types';
+import type { AgentMode, AgentMessagePart } from '../hooks/use-agent-chat';
 
 export function Session() {
   const location = useLocation();
@@ -21,127 +26,220 @@ export function Session() {
   const initialMode = initialState?.mode;
   const initialSent = useRef(false);
 
-  const { messages, loading, mode, sendInput, sendCommand, toggleMode, setMode, addMessage } =
-    useChat({
-      persistKey: 'session',
-      initialMode,
-    });
+  const toast = useToast();
+
+  const {
+    messages, loading, mode, setMode, toggleMode,
+    submit, stop, clear, appendMessage, model, setModel, status,
+  } = useAgentChat({
+    initialMode: initialMode === 'BUILD' || initialMode === 'PLAN' ? initialMode : undefined,
+  });
   const [showCommands, setShowCommands] = useState(false);
+  const [showSessionPanel, setShowSessionPanel] = useState(false);
   const dialog = useDialog();
 
   const exitApp = useCallback(() => process.exit(0), []);
   const navigate = useNavigate();
   const { theme } = useTheme();
 
+  const handleSetMode = useCallback((m: 'BUILD' | 'PLAN' | 'SCAN' | 'FIX') => {
+    if (m === 'BUILD' || m === 'PLAN') {
+      setMode(m);
+    }
+  }, [setMode]);
+
   const commandCtx: CommandContext = {
     exit: exitApp,
     navigate: (path: string) => navigate(path),
     execute: (action: string) => {
-      sendCommand(`/${action}`);
+      submit(`/${action}`);
     },
     mode,
-    setMode,
+    setMode: handleSetMode,
   };
 
-  const wrappedSendCommand = useCallback(
+  const wrappedSubmit = useCallback(
     (value: string) => {
-      const cmd = value.replace(/^\//, '').split(/\s+/)[0].toLowerCase();
-      if (cmd === 'wizard') {
-        dialog.open({
-          title: 'Multi-Step Analysis Wizard',
-          width: 70,
-          height: 35,
-          children: (
-            <MultiStepAnalyzeDialog
-              onRun={async (target, analyzers) => {
-                addMessage({
-                  role: 'user',
-                  content: `/analyze ${target} (analyzers: ${analyzers.join(', ')})`,
-                  parts: [
-                    {
-                      type: 'text',
-                      text: `/analyze ${target} (analyzers: ${analyzers.join(', ')})`,
-                    },
-                  ],
-                });
-                try {
-                  const result = await TOOLS.analyze.execute({ files: target });
-                  if (result.output) {
-                    addMessage({
-                      role: 'assistant',
-                      content: result.output,
-                      parts: [{ type: 'text', text: result.output }],
-                    });
-                  } else {
-                    addMessage({
+      if (value.startsWith('/')) {
+        const cmd = value.replace(/^\//, '').split(/\s+/)[0].toLowerCase();
+        if (cmd === 'clear') {
+          clear();
+          return;
+        }
+        if (cmd === 'new') {
+          navigate('/');
+          return;
+        }
+        if (cmd === 'wizard') {
+          dialog.open({
+            title: 'Multi-Step Analysis Wizard',
+            width: 70,
+            height: 35,
+            children: (
+              <MultiStepAnalyzeDialog
+                onRun={async (target, analyzers) => {
+                  appendMessage({
+                    role: 'user',
+                    mode,
+                    model,
+                    parts: [{ type: 'text', text: `/analyze ${target} (analyzers: ${analyzers.join(', ')})` }],
+                  });
+                  try {
+                    const result = await TOOLS.analyze.execute({ files: target });
+                    if (result.output) {
+                      appendMessage({
+                        role: 'assistant',
+                        mode,
+                        model,
+                        parts: [{ type: 'text', text: result.output }],
+                      });
+                    } else {
+                      appendMessage({
+                        role: 'error',
+                        parts: [{ type: 'text', text: result.error || 'Analysis failed' }],
+                      });
+                    }
+                  } catch (e) {
+                    appendMessage({
                       role: 'error',
-                      content: result.error || 'Analysis failed',
-                      parts: [{ type: 'text', text: result.error || 'Analysis failed' }],
+                      parts: [{ type: 'text', text: String(e) }],
                     });
                   }
-                } catch (e) {
-                  addMessage({
-                    role: 'error',
-                    content: String(e),
-                    parts: [{ type: 'text', text: String(e) }],
-                  });
-                }
-              }}
-            />
-          ),
-        });
+                }}
+              />
+            ),
+          });
+          return;
+        }
+        if (cmd === 'mode') {
+          toggleMode();
+          return;
+        }
+        if (cmd === 'help') {
+          toast.info('Commands: /clear /new /wizard /mode /help');
+          return;
+        }
+        toast.error('Unknown command. Type /help for commands.');
         return;
       }
-      sendCommand(value);
+      submit(value);
     },
-    [sendCommand, dialog, addMessage]
+    [clear, navigate, dialog, appendMessage, mode, model, toggleMode, toast, submit]
   );
+
+  const handleSelectSession = useCallback(async (id: string) => {
+    try {
+      const session = await Sessions.get(id);
+      if (!session) { toast.error('Session not found'); return; }
+      clear();
+      if (session.messages && Array.isArray(session.messages)) {
+        for (const m of session.messages) {
+          appendMessage({
+            role: m.role === 'user' || m.role === 'assistant' || m.role === 'error' ? m.role : 'assistant',
+            parts: (m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])) as AgentMessagePart[],
+            mode: (m.metadata?.mode === 'BUILD' || m.metadata?.mode === 'PLAN' ? m.metadata.mode : session.mode) as AgentMode | undefined,
+            model: (m.metadata?.model as string) || session.model,
+          });
+        }
+      }
+      if (session.mode === 'BUILD' || session.mode === 'PLAN') setMode(session.mode as AgentMode);
+      if (session.model) setModel(session.model);
+      setShowSessionPanel(false);
+    } catch {
+      toast.error('Failed to load session');
+    }
+  }, [clear, appendMessage, setMode, setModel, toast]);
+
+  const handleForkSession = useCallback(async (id: string) => {
+    try {
+      const session = await Sessions.get(id);
+      if (!session) { toast.error('Session not found'); return; }
+      const newSession = await Sessions.create({
+        title: session.title + ' (fork)',
+        mode: session.mode,
+        model: session.model,
+        projectPath: process.cwd(),
+      });
+      if (!newSession) { toast.error('Failed to create session'); return; }
+      await handleSelectSession(newSession.id);
+      toast.success('Session forked');
+    } catch {
+      toast.error('Failed to fork session');
+    }
+  }, [handleSelectSession, toast]);
+
+  const handleDeleteSession = useCallback((_id: string) => {
+    if (messages.length > 0) {
+      clear();
+    }
+  }, [clear, messages.length]);
+
+  useKeyboard((key) => {
+    if (key.name === 's' && key.ctrl) {
+      setShowSessionPanel((v) => !v);
+      return;
+    }
+  });
 
   useEffect(() => {
     if (initialMessage && !initialSent.current) {
       initialSent.current = true;
-      sendInput(initialMessage);
+      submit(initialMessage);
     }
-  }, [initialMessage, sendInput]);
+  }, [initialMessage, submit]);
 
   const handleModeToggle = useCallback(() => toggleMode(), [toggleMode]);
   const handleCommandPalette = useCallback(() => setShowCommands(v => !v), []);
 
-  return (
-    <box flexGrow={1} width="100%" height="100%" flexDirection="column">
-      <SessionShell
-        onSubmit={sendInput}
-        onCommand={wrappedSendCommand}
-        inputDisabled={loading}
-        loading={loading}
-        mode={mode}
-        onModeToggle={handleModeToggle}
-        onCommandPalette={handleCommandPalette}
-        model={`Sentinel ${getDisplayVersion()}`}
-        statusText={`${messages.length} msgs | ${theme.name}`}
-      >
-        {messages.length === 0 ? (
-          <box padding={2} alignItems="center" justifyContent="center">
-            <text attributes={2}>Start a conversation or type /help for commands</text>
-          </box>
-        ) : null}
-        {messages.map(msg => {
-          if (msg.role === 'error') {
-            return <ErrorMessage key={msg.id} message={msg.content} />;
-          }
-          if (msg.role === 'user') {
-            return <UserMessage key={msg.id} message={msg.content} mode={msg.mode || mode} />;
-          }
-          if (msg.role === 'assistant' || msg.role === 'system') {
-            return <BotMessage key={msg.id} parts={msg.parts} />;
-          }
-          return null;
-        })}
-      </SessionShell>
+  const isLoading = loading || status === 'streaming';
 
-      {showCommands ? (
-        <CommandMenu onClose={() => setShowCommands(false)} ctx={commandCtx} />
+  return (
+    <box flexGrow={1} width="100%" height="100%" flexDirection="row">
+      {showSessionPanel ? (
+        <SessionPanel
+          currentSessionId={undefined}
+          onSelect={handleSelectSession}
+          onFork={handleForkSession}
+          onDelete={handleDeleteSession}
+          onClose={() => setShowSessionPanel(false)}
+        />
       ) : null}
+      <box flexGrow={1} width={showSessionPanel ? undefined : '100%'} height="100%" flexDirection="column">
+        <SessionShell
+          onSubmit={wrappedSubmit}
+          inputDisabled={isLoading}
+          loading={isLoading}
+          mode={mode}
+          onModeToggle={handleModeToggle}
+          onCommandPalette={handleCommandPalette}
+          model={model}
+          statusText={`${messages.length} msgs | ${theme.name}`}
+        >
+          {messages.length === 0 ? (
+            <box padding={2} alignItems="center" justifyContent="center">
+              <text attributes={2}>Start a conversation or type /help for commands</text>
+            </box>
+          ) : null}
+          {messages.map(msg => {
+            if (msg.role === 'error') {
+              const text = msg.parts.find(p => p.type === 'text')?.text || 'Unknown error';
+              return <ErrorMessage key={msg.id} message={text} />;
+            }
+            if (msg.role === 'user') {
+              const text = msg.parts.find(p => p.type === 'text')?.text || '';
+              return <UserMessage key={msg.id} message={text} mode={msg.mode || mode} />;
+            }
+            if (msg.role === 'assistant') {
+              return <BotMessage key={msg.id} parts={msg.parts} model={msg.model || model} />;
+            }
+            return null;
+          })}
+        </SessionShell>
+
+        {showCommands ? (
+          <CommandMenu onClose={() => setShowCommands(false)} ctx={commandCtx} />
+        ) : null}
+      </box>
     </box>
   );
 }
