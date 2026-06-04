@@ -68,7 +68,7 @@
     "test:e2e": "node scripts/verify-server.mjs",
     "prepublishOnly": "npm run build",
     "postversion": "git push && git push --tags",
-    "postinstall": "if [ ! -f dist/cli.js ]; then node src/core/build.js; fi; echo \"\"; echo \"✨ Sentinel CLI ready! Run 'sentinel' for TUI or 'sentinel --help' for commands.\"; echo \"\""
+    "postinstall": "node -e \"var fs=require('fs');if(!fs.existsSync('dist/cli.js')){require('child_process').execSync('node src/core/build.js',{stdio:'inherit'})};console.log();console.log('✨ Sentinel CLI ready! Run sentinel for TUI or sentinel --help for commands.');console.log()\""
   },
   "keywords": [
     "cli",
@@ -178,6 +178,7 @@
     "node": ">=20.0.0",
     "bun": ">=1.0.0"
   },
+
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
